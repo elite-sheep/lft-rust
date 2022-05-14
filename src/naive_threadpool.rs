@@ -84,7 +84,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
+use std::{thread, time};
+
+use queues::*;
 
 trait FnBox {
     fn call_box(self: Box<Self>);
@@ -294,7 +296,10 @@ impl Builder {
             max_thread_count: AtomicUsize::new(num_threads),
             panic_count: AtomicUsize::new(0),
             stack_size: self.thread_stack_size,
+            live_thread_counter: AtomicUsize::new(num_threads),
         });
+
+        let jobs_queue = Arc::new(Mutex::new(queue![]));
 
         // Threadpool threads
         for _ in 0..num_threads {
@@ -304,6 +309,7 @@ impl Builder {
         NaiveThreadPool {
             jobs: tx,
             shared_data: shared_data,
+            jobs_queue: jobs_queue,
         }
     }
 }
@@ -319,6 +325,7 @@ struct NaiveThreadPoolSharedData {
     max_thread_count: AtomicUsize,
     panic_count: AtomicUsize,
     stack_size: Option<usize>,
+    live_thread_counter: AtomicUsize,
 }
 
 impl NaiveThreadPoolSharedData {
@@ -344,8 +351,9 @@ pub struct NaiveThreadPool {
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
-    jobs: Sender<Thunk<'static>>,
+    jobs: Arc<Sender<Thunk<'static>>>,
     shared_data: Arc<NaiveThreadPoolSharedData>,
+    jobs_queue: Arc<Mutex<Queue<&Thunk<static>>>>,
 }
 
 impl NaiveThreadPool {
@@ -366,6 +374,13 @@ impl NaiveThreadPool {
     /// ```
     pub fn new(num_threads: usize) -> NaiveThreadPool {
         Builder::new().num_threads(num_threads).build()
+    }
+
+    pub fn start(&self) {
+        //scheduler thread
+        thread::spawn(|| {
+            self.schedule();
+        });
     }
 
     /// Creates a new thread pool capable of executing `num_threads` number of jobs concurrently.
@@ -428,10 +443,14 @@ impl NaiveThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
+        let mut locked_queue = self.jobs_queue.lock().unwrap();
+        *queue.add(Box::new(job));
+
+
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
-        self.jobs
-            .send(Box::new(job))
-            .expect("NaiveThreadPool::execute unable to send job into queue.");
+        // self.jobs
+        //     .send(Box::new(job))
+        //     .expect("NaiveThreadPool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -635,6 +654,24 @@ impl NaiveThreadPool {
             Ordering::SeqCst
         );
     }
+
+    pub fn schedule(&self) {
+        let jobs = self.jobs.clone();
+        loop {
+            {
+                let mut locked_jobs_queue = self.jobs_queue.lock().unwrap();
+                if locked_jobs_queue.size() != 0 && 
+                    self.shared_data.live_thread_counter.load(Ordering::SeqCst) != 0 {
+                    let job = locked_jobs_queue.remove();
+                    jobs.send(Box::new(job))
+                        .expect("NaiveThreadPool::execute unable to send job into queue.");
+                } else {
+                    let ten_millis = time::Duration::from_millis(10);
+                    thread::sleep(ten_millis);
+                }
+            }
+        }
+    }
 }
 
 impl Clone for NaiveThreadPool {
@@ -766,9 +803,11 @@ fn spawn_in_pool(shared_data: Arc<NaiveThreadPoolSharedData>) {
                 // Do not allow IR around the job execution
                 shared_data.active_count.fetch_add(1, Ordering::SeqCst);
                 shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
+                shared_data.live_thread_counter.fetch_sub(1, Ordering::SeqCst);
 
                 job.call_box();
 
+                shared_data.live_thread_counter.fetch_add(1, Ordering::SeqCst);
                 shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
                 shared_data.no_work_notify_all();
             }

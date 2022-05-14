@@ -8,12 +8,15 @@ use std::sync::mpsc::channel;
 mod naive_threadpool;
 use naive_threadpool::{ NaiveThreadPool };
 
+#[macro_use] extern crate queues;
+
 fn main() {
     pretty_env_logger::init();
 
     let n_workers = 4;
     let n_jobs = 8;
     let thread_pool = NaiveThreadPool::new(n_workers);
+    thread_pool.start();
 
     let (tx, rx) = channel();
     for i in 0..n_jobs+10 {
@@ -29,4 +32,5 @@ fn main() {
         trace!("Hello, world: {}, {}.", i, j);
         i+j
     });
+    
 }
