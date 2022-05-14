@@ -6,14 +6,14 @@ extern crate pretty_env_logger;
 use std::sync::mpsc::channel;
 
 mod naive_threadpool;
-use naive_threadpool::{ ThreadPool };
+use naive_threadpool::{ NaiveThreadPool };
 
 fn main() {
     pretty_env_logger::init();
 
     let n_workers = 4;
     let n_jobs = 8;
-    let thread_pool = ThreadPool::new(n_workers);
+    let thread_pool = NaiveThreadPool::new(n_workers);
 
     let (tx, rx) = channel();
     for i in 0..n_jobs+10 {
