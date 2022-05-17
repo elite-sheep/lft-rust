@@ -80,10 +80,11 @@
 
 use num_cpus;
 
+use crossbeam_channel::{ unbounded, Receiver, Sender };
+
 use std::fmt;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{ AtomicUsize, Ordering };
+use std::sync::{ Arc, Condvar, Mutex };
 use std::thread;
 
 #[cfg(test)]
@@ -327,7 +328,7 @@ impl Builder {
     ///     .build();
     /// ```
     pub fn build(self) -> NaiveThreadPool {
-        let (tx, rx) = channel::<Thunk<'static>>();
+        let (tx, rx) = unbounded::<Thunk<'static>>();
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
 

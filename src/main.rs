@@ -3,12 +3,10 @@
 extern crate pretty_env_logger;
 #[macro_use] extern crate log;
 
-use std::sync::mpsc::channel;
+use crossbeam_channel::unbounded;
 
 mod naive_threadpool;
 use naive_threadpool::{ NaiveThreadPool };
-
-#[macro_use] extern crate queues;
 
 fn main() {
     pretty_env_logger::init();
@@ -21,7 +19,7 @@ fn main() {
         .build();
     // thread_pool.start();
 
-    let (tx, rx) = channel();
+    let (tx, rx) = unbounded();
     for i in 0..n_jobs+10 {
         trace!("hello, world: {} times.", i);
         let tx = tx.clone();
