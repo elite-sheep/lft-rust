@@ -6,7 +6,7 @@ extern crate pretty_env_logger;
 use std::sync::mpsc::channel;
 
 mod naive_threadpool;
-use naive_threadpool::{ ThreadPool };
+use naive_threadpool::{ NaiveThreadPool };
 
 #[macro_use] extern crate queues;
 

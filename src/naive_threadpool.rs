@@ -46,7 +46,7 @@
 //! https://doc.rust-lang.org/reference/behavior-not-considered-unsafe.html).
 //!
 //! ```
-//! use threadpool::ThreadPool;
+//! use threadpool::NaiveThreadPool;
 //! use std::sync::{Arc, Barrier};
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
@@ -98,7 +98,7 @@ mod test;
 /// ```
 /// let pool = threadpool::auto_config();
 /// ```
-pub fn auto_config() -> ThreadPool {
+pub fn auto_config() -> NaiveThreadPool {
     builder().build()
 }
 /// Initiate a new [`Builder`].
@@ -130,9 +130,9 @@ pub const fn builder() -> Builder {
 ///
 /// ```rust
 /// use std::thread;
-/// use threadpool::ThreadPool;
+/// use threadpool::NaiveThreadPool;
 ///
-/// let pool = ThreadPool::with_name("worker".into(), 2);
+/// let pool = NaiveThreadPool::with_name("worker".into(), 2);
 /// for _ in 0..2 {
 ///     pool.execute(|| {
 ///         assert_eq!(
@@ -145,7 +145,7 @@ pub const fn builder() -> Builder {
 /// ```
 ///
 /// [thread name]: https://doc.rust-lang.org/std/thread/struct.Thread.html#method.name
-pub fn with_name<S: AsRef<str>>(name: S) -> ThreadPool {
+pub fn with_name<S: AsRef<str>>(name: S) -> NaiveThreadPool {
     builder().worker_name(name).build()
 }
 */
@@ -163,12 +163,12 @@ impl<F: FnOnce()> FnBox for F {
 type Thunk<'a> = Box<dyn FnBox + Send + 'a>;
 
 struct Sentinel<'a> {
-    shared_data: &'a Arc<ThreadPoolSharedData>,
+    shared_data: &'a Arc<NaiveThreadPoolSharedData>,
     active: bool,
 }
 
 impl<'a> Sentinel<'a> {
-    fn new(shared_data: &'a Arc<ThreadPoolSharedData>) -> Sentinel<'a> {
+    fn new(shared_data: &'a Arc<NaiveThreadPoolSharedData>) -> Sentinel<'a> {
         Sentinel {
             shared_data: shared_data,
             active: true,
@@ -194,22 +194,22 @@ impl<'a> Drop for Sentinel<'a> {
     }
 }
 
-/// [`ThreadPool`] factory, which can be used in order to configure the properties of the
-/// [`ThreadPool`].
+/// [`NaiveThreadPool`] factory, which can be used in order to configure the properties of the
+/// [`NaiveThreadPool`].
 ///
 /// The three configuration options available:
 ///
 /// * `num_workers`: maximum number of threads that will be alive at any given moment by the built
-///   [`ThreadPool`]
-/// * `worker_name`: thread name for each of the threads spawned by the built [`ThreadPool`]
+///   [`NaiveThreadPool`]
+/// * `worker_name`: thread name for each of the threads spawned by the built [`NaiveThreadPool`]
 /// * `thread_stack_size`: stack size (in bytes) for each of the threads spawned by the built
-///   [`ThreadPool`]
+///   [`NaiveThreadPool`]
 ///
-/// [`ThreadPool`]: struct.ThreadPool.html
+/// [`NaiveThreadPool`]: struct.NaiveThreadPool.html
 ///
 /// # Examples
 ///
-/// Build a [`ThreadPool`] that uses a maximum of eight threads simultaneously and each thread has
+/// Build a [`NaiveThreadPool`] that uses a maximum of eight threads simultaneously and each thread has
 /// a 8 MB stack size:
 ///
 /// ```
@@ -227,9 +227,9 @@ pub struct Builder {
 
 impl Builder {
     /// Set the maximum number of worker-threads that will be alive at any given moment by the built
-    /// [`ThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
+    /// [`NaiveThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
     ///
-    /// [`ThreadPool`]: struct.ThreadPool.html
+    /// [`NaiveThreadPool`]: struct.NaiveThreadPool.html
     ///
     /// # Panics
     ///
@@ -258,10 +258,10 @@ impl Builder {
         self
     }
 
-    /// Set the thread name for each of the threads spawned by the built [`ThreadPool`]. If not
+    /// Set the thread name for each of the threads spawned by the built [`NaiveThreadPool`]. If not
     /// specified, threads spawned by the thread pool will be unnamed.
     ///
-    /// [`ThreadPool`]: struct.ThreadPool.html
+    /// [`NaiveThreadPool`]: struct.NaiveThreadPool.html
     ///
     /// # Examples
     ///
@@ -286,12 +286,12 @@ impl Builder {
         self
     }
 
-    /// Set the stack size (in bytes) for each of the threads spawned by the built [`ThreadPool`].
+    /// Set the stack size (in bytes) for each of the threads spawned by the built [`NaiveThreadPool`].
     /// If not specified, threads spawned by the threadpool will have a stack size [as specified in
     /// the `std::thread` documentation][thread].
     ///
     /// [thread]: https://doc.rust-lang.org/nightly/std/thread/index.html#stack-size
-    /// [`ThreadPool`]: struct.ThreadPool.html
+    /// [`NaiveThreadPool`]: struct.NaiveThreadPool.html
     ///
     /// # Examples
     ///
@@ -313,10 +313,10 @@ impl Builder {
         self
     }
 
-    /// Finalize the [`Builder`] and build the [`ThreadPool`].
+    /// Finalize the [`Builder`] and build the [`NaiveThreadPool`].
     ///
     /// [`Builder`]: struct.Builder.html
-    /// [`ThreadPool`]: struct.ThreadPool.html
+    /// [`NaiveThreadPool`]: struct.NaiveThreadPool.html
     ///
     /// # Examples
     ///
@@ -326,12 +326,12 @@ impl Builder {
     ///     .thread_stack_size(16*1024*1024)
     ///     .build();
     /// ```
-    pub fn build(self) -> ThreadPool {
+    pub fn build(self) -> NaiveThreadPool {
         let (tx, rx) = channel::<Thunk<'static>>();
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
 
-        let shared_data = Arc::new(ThreadPoolSharedData {
+        let shared_data = Arc::new(NaiveThreadPoolSharedData {
             name: self.worker_name,
             job_receiver: Mutex::new(rx),
             empty_condvar: Condvar::new(),
@@ -349,14 +349,14 @@ impl Builder {
             spawn_in_pool(shared_data.clone());
         }
 
-        ThreadPool {
+        NaiveThreadPool {
             jobs: tx,
             shared_data: shared_data,
         }
     }
 }
 
-struct ThreadPoolSharedData {
+struct NaiveThreadPoolSharedData {
     name: Option<String>,
     job_receiver: Mutex<Receiver<Thunk<'static>>>,
     empty_trigger: Mutex<()>,
@@ -369,7 +369,7 @@ struct ThreadPoolSharedData {
     stack_size: Option<usize>,
 }
 
-impl ThreadPoolSharedData {
+impl NaiveThreadPoolSharedData {
     fn has_work(&self) -> bool {
         self.queued_count.load(Ordering::SeqCst) > 0 || self.active_count.load(Ordering::SeqCst) > 0
     }
@@ -387,16 +387,16 @@ impl ThreadPoolSharedData {
 }
 
 /// Abstraction of a thread pool for basic parallelism.
-pub struct ThreadPool {
+pub struct NaiveThreadPool {
     // How the threadpool communicates with subthreads.
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
     jobs: Sender<Thunk<'static>>,
-    shared_data: Arc<ThreadPoolSharedData>,
+    shared_data: Arc<NaiveThreadPoolSharedData>,
 }
 
-impl ThreadPool {
+impl NaiveThreadPool {
     /// Executes the function `job` on a thread in the pool.
     ///
     /// # Examples
@@ -418,7 +418,7 @@ impl ThreadPool {
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
         self.jobs
             .send(Box::new(job))
-            .expect("ThreadPool::execute unable to send job into queue.");
+            .expect("NaiveThreadPool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -426,7 +426,7 @@ impl ThreadPool {
     /// # Examples
     ///
     /// ```
-    /// use threadpool::ThreadPool;
+    /// use threadpool::NaiveThreadPool;
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
@@ -568,12 +568,12 @@ impl ThreadPool {
     /// behavior is considered safe.
     ///
     /// **Note:** Join will not stop the worker threads. You will need to `drop`
-    /// all instances of `ThreadPool` for the worker threads to terminate.
+    /// all instances of `NaiveThreadPool` for the worker threads to terminate.
     ///
     /// # Examples
     ///
     /// ```
-    /// use threadpool::ThreadPool;
+    /// use threadpool::NaiveThreadPool;
     /// use std::sync::Arc;
     /// use std::sync::atomic::{AtomicUsize, Ordering};
     ///
@@ -615,7 +615,7 @@ impl ThreadPool {
     }
 }
 
-impl Clone for ThreadPool {
+impl Clone for NaiveThreadPool {
     /// Cloning a pool will create a new handle to the pool.
     /// The behavior is similar to [Arc](https://doc.rust-lang.org/stable/std/sync/struct.Arc.html).
     ///
@@ -651,17 +651,17 @@ impl Clone for ThreadPool {
     ///
     /// assert_eq!(vec![66, 39916800], results);
     /// ```
-    fn clone(&self) -> ThreadPool {
-        ThreadPool {
+    fn clone(&self) -> NaiveThreadPool {
+        NaiveThreadPool {
             jobs: self.jobs.clone(),
             shared_data: self.shared_data.clone(),
         }
     }
 }
 
-impl fmt::Debug for ThreadPool {
+impl fmt::Debug for NaiveThreadPool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ThreadPool")
+        f.debug_struct("NaiveThreadPool")
             .field("name", &self.shared_data.name)
             .field("queued_count", &self.queued_count())
             .field("active_count", &self.active_count())
@@ -670,7 +670,7 @@ impl fmt::Debug for ThreadPool {
     }
 }
 
-impl PartialEq for ThreadPool {
+impl PartialEq for NaiveThreadPool {
     /// Check if you are working with the same pool
     ///
     /// ```
@@ -683,13 +683,13 @@ impl PartialEq for ThreadPool {
     /// assert_ne!(a, b);
     /// assert_ne!(b, a);
     /// ```
-    fn eq(&self, other: &ThreadPool) -> bool {
+    fn eq(&self, other: &NaiveThreadPool) -> bool {
         Arc::ptr_eq(&self.shared_data, &other.shared_data)
     }
 }
-impl Eq for ThreadPool {}
+impl Eq for NaiveThreadPool {}
 
-fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>) {
+fn spawn_in_pool(shared_data: Arc<NaiveThreadPoolSharedData>) {
     let mut builder = thread::Builder::new();
     if let Some(ref name) = shared_data.name {
         builder = builder.name(name.clone());
@@ -721,7 +721,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>) {
 
                 let job = match message {
                     Ok(job) => job,
-                    // The ThreadPool was dropped.
+                    // The NaiveThreadPool was dropped.
                     Err(..) => break,
                 };
                 // Do not allow IR around the job execution
