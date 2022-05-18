@@ -1,12 +1,12 @@
 // Copyright @yucwang 2022
 
-extern crate pretty_env_logger;
-#[macro_use] extern crate log;
+// extern crate pretty_env_logger;
+// #[macro_use] extern crate log;
 
 use crossbeam_channel::unbounded;
 
-mod naive_threadpool;
-use naive_threadpool::{ NaiveThreadPool };
+// mod naive_threadpool;
+// use naive_threadpool::{ NaiveThreadPool };
 
 use std::{thread, time};
 
