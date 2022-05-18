@@ -1,17 +1,31 @@
 // Copyright @yucwang 2022
 
-// extern crate pretty_env_logger;
-// #[macro_use] extern crate log;
+extern crate pretty_env_logger;
+#[macro_use] extern crate log;
 
 use crossbeam_channel::unbounded;
 
-// mod naive_threadpool;
-// use naive_threadpool::{ NaiveThreadPool };
+mod naive_threadpool;
+use naive_threadpool::{ NaiveThreadPool };
 
 use std::{thread, time};
 
 mod threadpool;
 use threadpool::{ ThreadPool };
+#[macro_use] extern crate queues;
+
+
+extern crate npy;
+
+use std::io::Read;
+use npy::NpyData;
+use ndarray::{Array, Array1};
+
+// #[derive(Debug)]
+// struct Array {
+//     a: f64,
+//     b: f64,
+// }
 
 fn main() {
     pretty_env_logger::init();
@@ -35,6 +49,9 @@ fn main() {
             let now = time::Instant::now();
 
             thread::sleep(ten_millis);
+
+            //multiply_random_matrix();
+
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
@@ -49,4 +66,23 @@ fn main() {
         i+j
     });
     
+}
+
+
+fn multiply_random_matrix() {
+    let mut buf1 = vec![];
+    let mut buf2=vec![];
+    let data1: Vec<f64> = NpyData::from_bytes(&buf1).unwrap().to_vec();
+    let data2: Vec<f64> = NpyData::from_bytes(&buf2).unwrap().to_vec();
+
+    //transpose data2
+    let data1_len = data1.len();
+    let mut output_array = vec![0.0; data1_len];
+    let new_vector: Array1<_> = 1 * output_array;
+    transpose::transpose(&data2, &mut output_array, 1, data1_len);
+
+    let a = Array::from(data1);
+    let b = Array::from(output_array);
+
+    let multiplied_matrix = a.dot(&new_vector);
 }
