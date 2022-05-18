@@ -19,7 +19,7 @@ extern crate npy;
 
 use std::io::Read;
 use npy::NpyData;
-use ndarray::{Array, Array1};
+use ndarray::{arr1, Array, Array1};
 
 // #[derive(Debug)]
 // struct Array {
@@ -50,8 +50,8 @@ fn main() {
 
             thread::sleep(ten_millis);
 
-            //multiply_random_matrix();
-
+            // trace!("hello, world");
+            multiply_random_matrix();
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
@@ -72,13 +72,18 @@ fn main() {
 fn multiply_random_matrix() {
     let mut buf1 = vec![];
     let mut buf2=vec![];
+    std::fs::File::open("examples/test_1.npy").unwrap()
+        .read_to_end(&mut buf1).unwrap();
+        std::fs::File::open("examples/test_2.npy").unwrap()
+        .read_to_end(&mut buf2).unwrap();
+
     let data1: Vec<f64> = NpyData::from_bytes(&buf1).unwrap().to_vec();
     let data2: Vec<f64> = NpyData::from_bytes(&buf2).unwrap().to_vec();
 
     //transpose data2
     let data1_len = data1.len();
     let mut output_array = vec![0.0; data1_len];
-    let new_vector: Array1<_> = 1 * output_array;
+    let new_vector: Array1<_> = 1.0 * arr1(&output_array);
     transpose::transpose(&data2, &mut output_array, 1, data1_len);
 
     let a = Array::from(data1);
