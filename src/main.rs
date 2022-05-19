@@ -14,8 +14,13 @@ use naive_threadpool::{ NaiveThreadPool };
 extern crate npy;
 
 use std::io::Read;
+use std::time::{SystemTime, UNIX_EPOCH};
 use npy::NpyData;
 use ndarray::{arr1, Array, Array1};
+use ndarray_rand::RandomExt;
+use ndarray_rand::rand_distr::Uniform;
+
+use std::{thread, time};
 
 // #[derive(Debug)]
 // struct Array {
@@ -25,32 +30,39 @@ use ndarray::{arr1, Array, Array1};
 
 fn main() {
     pretty_env_logger::init();
+    let now = SystemTime::now();
 
     let n_workers = 4;
-    let n_jobs = 8;
+    let n_jobs = n_workers+2;
     let thread_pool = naive_threadpool::builder()
-        .num_workers(8)
+        .num_workers(n_workers)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
 
     let (tx, rx) = channel();
-    for i in 0..n_jobs+10 {
-        trace!("hello, world: {} times.", i);
+    for i in 0..n_jobs {
+        // trace!("hello, world: {} times.", i);
         let tx = tx.clone();
         thread_pool.execute(move || {
             // trace!("hello, world");
-            multiply_random_matrix();
+            // multiply_random_matrix();
+            multiply_matrices();
+            // let time_to_sleep = time::Duration::from_millis(1000);
+            // thread::sleep(time_to_sleep);
             tx.send(1).expect("channel will be there waiting for the pool");
         });
     }
     thread_pool.join();
 
-    rx.iter().take(n_jobs+10).fold(0, |i, j| {
-        trace!("Hello, world: {}, {}.", i, j);
+    rx.iter().take(n_jobs).fold(0, |i, j| {
+        // trace!("Hello, world: {}, {}.", i, j);
         i+j
     });
     
+    let since_the_epoch = now.elapsed();
+    println!("Time duration: {:?}ms", since_the_epoch.unwrap().as_millis());
+    // generate_random_matrices(3, 4);
 }
 
 
@@ -75,4 +87,22 @@ fn multiply_random_matrix() {
     let b = Array::from(output_array);
 
     let multiplied_matrix = a.dot(&new_vector);
+}
+
+
+fn multiply_matrices() {
+    //generate random matrices of size 1000*1000
+    let a = Array::random((1000, 1000), Uniform::new(0.0_f32, 10.0_f32));
+    let b = Array::random((1000, 1000), Uniform::new(0.0_f32, 10.0_f32));
+
+    //transpose data2
+    // let data1_len = data1.len();
+    // let mut output_array = vec![0.0; data1_len];
+    // let new_vector: Array1<_> = 1.0 * arr1(&output_array);
+    // transpose::transpose(&data2, &mut output_array, 1, data1_len);
+
+    // let a = Array::from(data1);
+    // let b = Array::from(output_array);
+
+    let multiplied_matrix = a.dot(&b);
 }
