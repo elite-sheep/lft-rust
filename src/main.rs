@@ -21,6 +21,7 @@ use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 
 use std::{thread, time};
+use rand::Rng;
 
 // #[derive(Debug)]
 // struct Array {
@@ -33,7 +34,7 @@ fn main() {
     let now = SystemTime::now();
 
     let n_workers = 4;
-    let n_jobs = n_workers+2;
+    let n_jobs = n_workers;
     let thread_pool = naive_threadpool::builder()
         .num_workers(n_workers)
         .thread_stack_size(8 * 1024 * 1024)
@@ -91,9 +92,11 @@ fn multiply_random_matrix() {
 
 
 fn multiply_matrices() {
+    let matrix_size = rand::thread_rng().gen_range(1800..2200);
+
     //generate random matrices of size 1000*1000
-    let a = Array::random((1000, 1000), Uniform::new(0.0_f32, 10.0_f32));
-    let b = Array::random((1000, 1000), Uniform::new(0.0_f32, 10.0_f32));
+    let a = Array::random((matrix_size, matrix_size), Uniform::new(0.0_f32, 10.0_f32));
+    let b = Array::random((matrix_size, matrix_size), Uniform::new(0.0_f32, 10.0_f32));
 
     //transpose data2
     // let data1_len = data1.len();
