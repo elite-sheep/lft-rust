@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 name: build_check
 
-job:
+jobs:
   name: Check
   runs-on: ubuntu-latest
   steps:
