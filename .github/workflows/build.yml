@@ -1,0 +1,34 @@
+# Copyright @yucwang 2022
+
+on: [push, pull_request]
+
+name: build_check
+
+job:
+  name: Check
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout sources
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Run cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+
+  name: Build
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout sources
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Run cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
