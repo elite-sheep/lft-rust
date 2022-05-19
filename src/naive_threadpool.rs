@@ -20,13 +20,13 @@
 //! Every thread sends one message over the channel, which then is collected with the `take()`.
 //!
 //! ```
-//! use std::sync::mpsc::channel;
+//! use crossbeam_channel::unbounded;
 //!
 //! let n_workers = 4;
 //! let n_jobs = 8;
 //! let pool = threadpool::builder().num_workers(n_workers).build();
 //!
-//! let (tx, rx) = channel();
+//! let (tx, rx) = unbounded();
 //! for _ in 0..n_jobs {
 //!     let tx = tx.clone();
 //!     pool.execute(move|| {
@@ -624,7 +624,7 @@ impl Clone for NaiveThreadPool {
     ///
     /// ```
     /// use std::thread;
-    /// use std::sync::mpsc::channel;
+    /// use crossbeam_channel::unbounded;
     ///
     /// let pool = threadpool::builder().worker_name("clone example").num_workers(2).build();
     ///
@@ -632,7 +632,7 @@ impl Clone for NaiveThreadPool {
     ///     .map(|i| {
     ///         let pool = pool.clone();
     ///         thread::spawn(move || {
-    ///             let (tx, rx) = channel();
+    ///             let (tx, rx) = unbounded();
     ///             for i in 1..12 {
     ///                 let tx = tx.clone();
     ///                 pool.execute(move || {
