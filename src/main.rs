@@ -18,6 +18,7 @@ fn main() {
     let n_jobs = 8;
     let thread_pool = threadpool::builder()
         .num_workers(8)
+        .max_thread_count(16)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
