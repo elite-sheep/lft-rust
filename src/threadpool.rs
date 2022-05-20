@@ -459,6 +459,7 @@ impl ThreadPool {
             }
         }
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
+        self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
         self.context.senders[target_thread_id]
             .send(Box::new(job))
             .expect("ThreadPool::execute unable to send job into queue.");
@@ -778,6 +779,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 // Do not allow IR around the job execution
                 shared_data.active_count.fetch_add(1, Ordering::SeqCst);
                 shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
+                num_jobs.fetch_sub(1, Ordering::SeqCst);
 
                 job.call_box();
 
