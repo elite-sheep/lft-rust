@@ -165,13 +165,19 @@ type Thunk<'a> = Box<dyn FnBox + Send + 'a>;
 
 struct Sentinel<'a> {
     shared_data: &'a Arc<ThreadPoolSharedData>,
+    receiver: &'a Arc<Receiver<Thunk<'static>>>,
+    num_jobs: &'a Arc<AtomicUsize>,
     active: bool,
 }
 
 impl<'a> Sentinel<'a> {
-    fn new(shared_data: &'a Arc<ThreadPoolSharedData>) -> Sentinel<'a> {
+    fn new(shared_data: &'a Arc<ThreadPoolSharedData>, 
+           receiver: &'a Arc<Receiver<Thunk<'static>>>,
+           num_jobs: &'a Arc<AtomicUsize>) -> Sentinel<'a> {
         Sentinel {
             shared_data: shared_data,
+            receiver: receiver,
+            num_jobs: num_jobs,
             active: true,
         }
     }
@@ -190,7 +196,7 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
             self.shared_data.no_work_notify_all();
-            spawn_in_pool(self.shared_data.clone())
+            spawn_in_pool(self.shared_data.clone(), self.receiver.clone(), self.num_jobs.clone())
         }
     }
 }
@@ -332,6 +338,22 @@ impl Builder {
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
 
+        let mut num_jobs_list: Vec<Arc<AtomicUsize>> = Vec::with_capacity(num_workers);
+        let mut sender_list: Vec<Sender<Thunk<'static>>> = Vec::with_capacity(num_workers);
+        let mut receiver_list: Vec<Receiver<Thunk<'static>>> = Vec::with_capacity(num_workers);
+        for _ in 0..num_workers {
+            let (tx, rx) = unbounded::<Thunk<'static>>();
+            num_jobs_list.push(Arc::new(AtomicUsize::new(0)));
+            sender_list.push(tx);
+            receiver_list.push(rx);
+        }
+
+        let context = Arc::new(ThreadPoolContext {
+            num_workers: AtomicUsize::new(num_workers),
+            queued_count: num_jobs_list.clone(),
+            senders: sender_list
+        });
+
         let shared_data = Arc::new(ThreadPoolSharedData {
             name: self.worker_name,
             job_receiver: Mutex::new(rx),
@@ -346,13 +368,16 @@ impl Builder {
         });
 
         // Threadpool threads
-        for _ in 0..num_workers {
-            spawn_in_pool(shared_data.clone());
+        for i in 0..num_workers {
+            spawn_in_pool(shared_data.clone(), 
+                          Arc::new(receiver_list[i].clone()), 
+                          num_jobs_list[i].clone());
         }
 
         ThreadPool {
             jobs: tx,
             shared_data: shared_data,
+            context: context,
         }
     }
 }
@@ -387,6 +412,12 @@ impl ThreadPoolSharedData {
     }
 }
 
+struct ThreadPoolContext {
+    num_workers: AtomicUsize,
+    queued_count: Vec<Arc<AtomicUsize>>,
+    senders: Vec<Sender<Thunk<'static>>>,
+}
+
 /// Abstraction of a thread pool for basic parallelism.
 pub struct ThreadPool {
     // How the threadpool communicates with subthreads.
@@ -395,6 +426,7 @@ pub struct ThreadPool {
     // quit.
     jobs: Sender<Thunk<'static>>,
     shared_data: Arc<ThreadPoolSharedData>,
+    context: Arc<ThreadPoolContext>,
 }
 
 impl ThreadPool {
@@ -416,10 +448,24 @@ impl ThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
+        let num_workers = self.context.num_workers.load(Ordering::SeqCst);
+        let mut target_thread_id = num_workers + 1;
+        let mut min_jobs_counted: usize = 9999999;
+        for i in 0..num_workers {
+            let job_count = self.context.queued_count[i].load(Ordering::SeqCst);
+            if target_thread_id > num_workers || job_count < min_jobs_counted {
+                target_thread_id = i;
+                min_jobs_counted = job_count;
+            }
+        }
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
-        self.jobs
+        self.context.senders[target_thread_id]
             .send(Box::new(job))
             .expect("ThreadPool::execute unable to send job into queue.");
+
+        // self.jobs
+        //     .send(Box::new(job))
+        //     .expect("ThreadPool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -543,19 +589,19 @@ impl ThreadPool {
     /// assert_eq!(8, pool.active_count());
     /// assert_eq!(2, pool.queued_count());
     /// ```
-    pub fn set_num_workers(&self, num_workers: usize) {
-        assert!(num_workers >= 1);
-        let prev_num_workers = self
-            .shared_data
-            .max_thread_count
-            .swap(num_workers, Ordering::Release);
-        if let Some(num_spawn) = num_workers.checked_sub(prev_num_workers) {
-            // Spawn new threads
-            for _ in 0..num_spawn {
-                spawn_in_pool(self.shared_data.clone());
-            }
-        }
-    }
+    // pub fn set_num_workers(&self, num_workers: usize) {
+    //     assert!(num_workers >= 1);
+    //     let prev_num_workers = self
+    //         .shared_data
+    //         .max_thread_count
+    //         .swap(num_workers, Ordering::Release);
+    //     if let Some(num_spawn) = num_workers.checked_sub(prev_num_workers) {
+    //         // Spawn new threads
+    //         for _ in 0..num_spawn {
+    //             spawn_in_pool(self.shared_data.clone());
+    //         }
+    //     }
+    // }
 
     /// Block the current thread until all jobs in the pool have been executed.
     ///
@@ -656,6 +702,7 @@ impl Clone for ThreadPool {
         ThreadPool {
             jobs: self.jobs.clone(),
             shared_data: self.shared_data.clone(),
+            context: self.context.clone(),
         }
     }
 }
@@ -690,7 +737,9 @@ impl PartialEq for ThreadPool {
 }
 impl Eq for ThreadPool {}
 
-fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>) {
+fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>, 
+                 receiver: Arc<Receiver<Thunk<'static>>>,
+                 num_jobs: Arc<AtomicUsize>) {
     let mut builder = thread::Builder::new();
     if let Some(ref name) = shared_data.name {
         builder = builder.name(name.clone());
@@ -701,7 +750,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>) {
     builder
         .spawn(move || {
             // Will spawn a new thread on panic unless it is cancelled.
-            let sentinel = Sentinel::new(&shared_data);
+            let sentinel = Sentinel::new(&shared_data, &receiver, &num_jobs);
 
             loop {
                 // Shutdown this thread if the pool has become smaller
@@ -713,11 +762,12 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>) {
                 let message = {
                     // Only lock jobs for the time it takes
                     // to get a job, not run it.
-                    let lock = shared_data
-                        .job_receiver
-                        .lock()
-                        .expect("Worker thread unable to lock job_receiver");
-                    lock.recv()
+                    // let lock = shared_data
+                    //     .job_receiver
+                    //     .lock()
+                    //     .expect("Worker thread unable to lock job_receiver");
+                    // lock.recv()
+                    receiver.recv()
                 };
 
                 let job = match message {
