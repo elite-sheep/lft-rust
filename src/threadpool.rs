@@ -81,6 +81,7 @@
 use num_cpus;
 
 use crossbeam_channel::{ unbounded, Receiver, Sender };
+use log::{ warn };
 
 use std::fmt;
 use std::sync::atomic::{ AtomicUsize, Ordering };
@@ -114,6 +115,7 @@ pub fn auto_config() -> ThreadPool {
 pub const fn builder() -> Builder {
     Builder {
         num_workers: None,
+        max_thread_count: None,
         worker_name: None,
         thread_stack_size: None,
     }
@@ -230,6 +232,7 @@ impl<'a> Drop for Sentinel<'a> {
 #[derive(Clone, Default)]
 pub struct Builder {
     num_workers: Option<usize>,
+    max_thread_count: Option<usize>,
     worker_name: Option<String>,
     thread_stack_size: Option<usize>,
 }
@@ -264,6 +267,12 @@ impl Builder {
     pub fn num_workers(mut self, num_workers: usize) -> Builder {
         assert!(num_workers > 0);
         self.num_workers = Some(num_workers);
+        self
+    }
+
+    pub fn max_thread_count(mut self, max_thread_count: usize) -> Builder {
+        assert!(max_thread_count > 0);
+        self.max_thread_count = Some(max_thread_count);
         self
     }
 
@@ -339,10 +348,15 @@ impl Builder {
         // let (tx, rx) = unbounded::<Thunk<'static>>();
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
+        let max_thread_count = self.max_thread_count.unwrap_or_else(|| {num_workers});
+        if max_thread_count < num_workers {
+            warn!("Number of works is larger than max thread number, shrinking 
+                     the thread pool to max thread number {}.", max_thread_count);
+        }
 
-        let mut num_jobs_list: Vec<Arc<AtomicUsize>> = Vec::with_capacity(num_workers);
-        let mut sender_list: Vec<Sender<Thunk<'static>>> = Vec::with_capacity(num_workers);
-        let mut receiver_list: Vec<Receiver<Thunk<'static>>> = Vec::with_capacity(num_workers);
+        let mut num_jobs_list: Vec<Arc<AtomicUsize>> = Vec::with_capacity(max_thread_count);
+        let mut sender_list: Vec<Sender<Thunk<'static>>> = Vec::with_capacity(max_thread_count);
+        let mut receiver_list: Vec<Receiver<Thunk<'static>>> = Vec::with_capacity(max_thread_count);
         for _ in 0..num_workers {
             let (tx, rx) = unbounded::<Thunk<'static>>();
             num_jobs_list.push(Arc::new(AtomicUsize::new(0)));
@@ -364,7 +378,7 @@ impl Builder {
             join_generation: AtomicUsize::new(0),
             queued_count: AtomicUsize::new(0),
             active_count: AtomicUsize::new(0),
-            max_thread_count: AtomicUsize::new(num_workers),
+            max_thread_count: AtomicUsize::new(max_thread_count),
             panic_count: AtomicUsize::new(0),
             stack_size: self.thread_stack_size,
         });
@@ -452,12 +466,21 @@ impl ThreadPool {
     {
         let num_workers = self.context.num_workers.load(Ordering::Acquire);
         let mut target_thread_id = num_workers + 1;
-        let mut min_jobs_counted: usize = 9999999;
+        let mut min_jobs_counted: usize = 0;
         for i in 0..num_workers {
-            let job_count = self.context.queued_count[i].load(Ordering::Relaxed);
-            if target_thread_id > num_workers || job_count < min_jobs_counted {
+            // The main thread is the only 
+            if i >= self.context.num_workers.load(Ordering::Acquire) {
+                continue;
+            }
+            if self.context.queued_count[i].load(Ordering::Relaxed) == 0 {
                 target_thread_id = i;
-                min_jobs_counted = job_count;
+                min_jobs_counted = 0;
+                break;
+            }
+            if target_thread_id > num_workers 
+                || self.context.queued_count[i].load(Ordering::Relaxed) < min_jobs_counted {
+                target_thread_id = i;
+                min_jobs_counted = self.context.queued_count[i].load(Ordering::Relaxed);
             }
         }
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
