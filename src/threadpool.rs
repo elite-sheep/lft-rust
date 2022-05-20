@@ -334,7 +334,7 @@ impl Builder {
     ///     .build();
     /// ```
     pub fn build(self) -> ThreadPool {
-        let (tx, rx) = unbounded::<Thunk<'static>>();
+        // let (tx, rx) = unbounded::<Thunk<'static>>();
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
 
@@ -356,7 +356,7 @@ impl Builder {
 
         let shared_data = Arc::new(ThreadPoolSharedData {
             name: self.worker_name,
-            job_receiver: Mutex::new(rx),
+            // job_receiver: Mutex::new(rx),
             empty_condvar: Condvar::new(),
             empty_trigger: Mutex::new(()),
             join_generation: AtomicUsize::new(0),
@@ -375,7 +375,7 @@ impl Builder {
         }
 
         ThreadPool {
-            jobs: tx,
+            // jobs: tx,
             shared_data: shared_data,
             context: context,
         }
@@ -384,7 +384,7 @@ impl Builder {
 
 struct ThreadPoolSharedData {
     name: Option<String>,
-    job_receiver: Mutex<Receiver<Thunk<'static>>>,
+    // job_receiver: Mutex<Receiver<Thunk<'static>>>,
     empty_trigger: Mutex<()>,
     empty_condvar: Condvar,
     join_generation: AtomicUsize,
@@ -424,7 +424,7 @@ pub struct ThreadPool {
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
-    jobs: Sender<Thunk<'static>>,
+    // jobs: Sender<Thunk<'static>>,
     shared_data: Arc<ThreadPoolSharedData>,
     context: Arc<ThreadPoolContext>,
 }
@@ -700,7 +700,7 @@ impl Clone for ThreadPool {
     /// ```
     fn clone(&self) -> ThreadPool {
         ThreadPool {
-            jobs: self.jobs.clone(),
+            // jobs: self.jobs.clone(),
             shared_data: self.shared_data.clone(),
             context: self.context.clone(),
         }
