@@ -195,7 +195,9 @@ impl<'a> Drop for Sentinel<'a> {
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
-            self.shared_data.no_work_notify_all();
+            if self.num_jobs.load(Ordering::Acquire) == 0 {
+                self.shared_data.no_work_notify_all();
+            }
             spawn_in_pool(self.shared_data.clone(), self.receiver.clone(), self.num_jobs.clone())
         }
     }
@@ -448,11 +450,11 @@ impl ThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
-        let num_workers = self.context.num_workers.load(Ordering::SeqCst);
+        let num_workers = self.context.num_workers.load(Ordering::Acquire);
         let mut target_thread_id = num_workers + 1;
         let mut min_jobs_counted: usize = 9999999;
         for i in 0..num_workers {
-            let job_count = self.context.queued_count[i].load(Ordering::SeqCst);
+            let job_count = self.context.queued_count[i].load(Ordering::Relaxed);
             if target_thread_id > num_workers || job_count < min_jobs_counted {
                 target_thread_id = i;
                 min_jobs_counted = job_count;
@@ -463,10 +465,6 @@ impl ThreadPool {
         self.context.senders[target_thread_id]
             .send(Box::new(job))
             .expect("ThreadPool::execute unable to send job into queue.");
-
-        // self.jobs
-        //     .send(Box::new(job))
-        //     .expect("ThreadPool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -757,17 +755,12 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 // Shutdown this thread if the pool has become smaller
                 let thread_counter_val = shared_data.active_count.load(Ordering::Acquire);
                 let max_thread_count_val = shared_data.max_thread_count.load(Ordering::Relaxed);
-                if thread_counter_val >= max_thread_count_val {
+                if thread_counter_val >= max_thread_count_val && num_jobs.load(Ordering::Acquire) == 0 {
                     break;
                 }
                 let message = {
-                    // Only lock jobs for the time it takes
-                    // to get a job, not run it.
-                    // let lock = shared_data
-                    //     .job_receiver
-                    //     .lock()
-                    //     .expect("Worker thread unable to lock job_receiver");
-                    // lock.recv()
+                    // Each thread will have a job queue, thread will fetch its own
+                    // work from its job queue.
                     receiver.recv()
                 };
 
@@ -784,7 +777,9 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 job.call_box();
 
                 shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-                shared_data.no_work_notify_all();
+                if num_jobs.load(Ordering::Acquire) == 0 {
+                    shared_data.no_work_notify_all();
+                }
             }
 
             sentinel.cancel();

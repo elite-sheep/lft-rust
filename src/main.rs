@@ -23,7 +23,7 @@ fn main() {
     // thread_pool.start();
 
     let (tx, rx) = unbounded();
-    for i in 0..n_jobs+128 {
+    for i in 0..n_jobs+1 {
         trace!("hello, world: {} times.", i);
         let tx = tx.clone();
         thread_pool.execute(move || {
@@ -33,7 +33,7 @@ fn main() {
     }
     thread_pool.join();
 
-    rx.iter().take(n_jobs+10).fold(0, |i, j| {
+    rx.iter().take(n_jobs+1).fold(0, |i, j| {
         trace!("Hello, world: {}, {}.", i, j);
         i+j
     });
