@@ -8,6 +8,8 @@ use crossbeam_channel::unbounded;
 mod naive_threadpool;
 use naive_threadpool::{ NaiveThreadPool };
 
+use std::{thread, time};
+
 mod threadpool;
 use threadpool::{ ThreadPool };
 
@@ -29,12 +31,16 @@ fn main() {
         let tx = tx.clone();
         thread_pool.execute(move || {
             trace!("hello, world: {}.", i);
+            let ten_millis = time::Duration::from_millis(128);
+            let now = time::Instant::now();
+
+            thread::sleep(ten_millis);
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
-        if i < 4 {
-            thread_pool.spawn_extra_one_worker();
-        }
+        // if i < 3 {
+        //     thread_pool.spawn_extra_one_worker();
+        // }
     }
     thread_pool.join();
 
