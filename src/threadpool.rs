@@ -84,7 +84,7 @@ use crossbeam_channel::{ unbounded, Receiver, Sender };
 use log::{ trace, warn };
 
 use std::fmt;
-use std::sync::atomic::{ AtomicBool, AtomicUsize, Ordering };
+use std::sync::atomic::{ AtomicI8, AtomicUsize, Ordering };
 use std::sync::{ Arc, Condvar, Mutex };
 use std::thread;
 
@@ -169,7 +169,7 @@ struct Sentinel<'a> {
     shared_data: &'a Arc<ThreadPoolSharedData>,
     receiver: &'a Arc<Receiver<Thunk<'static>>>,
     num_jobs: &'a Arc<AtomicUsize>,
-    thread_closing: &'a Arc<AtomicBool>,
+    thread_closing: &'a Arc<AtomicI8>,
     active: bool,
 }
 
@@ -177,7 +177,7 @@ impl<'a> Sentinel<'a> {
     fn new(shared_data: &'a Arc<ThreadPoolSharedData>, 
            receiver: &'a Arc<Receiver<Thunk<'static>>>,
            num_jobs: &'a Arc<AtomicUsize>,
-           thread_closing: &'a Arc<AtomicBool>) -> Sentinel<'a> {
+           thread_closing: &'a Arc<AtomicI8>) -> Sentinel<'a> {
         shared_data.num_workers.fetch_add(1, Ordering::SeqCst);
         Sentinel {
             shared_data: shared_data,
@@ -199,12 +199,14 @@ impl<'a> Drop for Sentinel<'a> {
         if self.active {
             self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
             self.shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
+            self.thread_closing.swap(2, Ordering::SeqCst);
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
             if self.num_jobs.load(Ordering::Acquire) == 0 {
                 self.shared_data.no_work_notify_all();
             }
+
             spawn_in_pool(self.shared_data.clone(), 
                           self.receiver.clone(), 
                           self.num_jobs.clone(), 
@@ -364,7 +366,7 @@ impl Builder {
         }
 
         let mut num_jobs_list: Vec<Arc<AtomicUsize>> = Vec::with_capacity(max_thread_count);
-        let mut thread_closing_list: Vec<Arc<AtomicBool>> = Vec::with_capacity(max_thread_count);
+        let mut thread_closing_list: Vec<Arc<AtomicI8>> = Vec::with_capacity(max_thread_count);
         let mut sender_list: Vec<Sender<Thunk<'static>>> = Vec::with_capacity(max_thread_count);
         let mut receiver_list: Vec<Arc<Receiver<Thunk<'static>>>> = Vec::with_capacity(max_thread_count);
         for i in 0..max_thread_count {
@@ -372,7 +374,7 @@ impl Builder {
             num_jobs_list.push(Arc::new(AtomicUsize::new(0)));
             sender_list.push(tx);
             receiver_list.push(Arc::new(rx));
-            thread_closing_list.push(Arc::new(AtomicBool::new(true)));
+            thread_closing_list.push(Arc::new(AtomicI8::new(2)));
         }
 
         let context = Arc::new(ThreadPoolContext {
@@ -447,7 +449,7 @@ struct ThreadPoolContext {
     queued_count: Vec<Arc<AtomicUsize>>,
     senders: Vec<Sender<Thunk<'static>>>,
     receivers: Vec<Arc<Receiver<Thunk<'static>>>>,
-    thread_closing: Vec<Arc<AtomicBool>>,
+    thread_closing: Vec<Arc<AtomicI8>>,
 }
 
 /// Abstraction of a thread pool for basic parallelism.
@@ -484,14 +486,9 @@ impl ThreadPool {
         let mut target_thread_id = max_thread_count + 1;
         let mut min_jobs_counted: usize = 0;
         for i in 0..max_thread_count {
-            // The main thread is the only 
-            if self.context.thread_closing[i].load(Ordering::Acquire) == true {
+            if self.context.thread_closing[i].load(Ordering::Acquire) > 0 {
+                // The thread is closed or about to close.
                 continue;
-            }
-            if i >= self.shared_data.num_workers.load(Ordering::Acquire) {
-                target_thread_id = 0;
-                min_jobs_counted = 0;
-                break;
             }
             if self.context.queued_count[i].load(Ordering::Relaxed) == 0 {
                 target_thread_id = i;
@@ -659,7 +656,7 @@ impl ThreadPool {
         let mut new_index: usize = 0;
         let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
         for i in 0..max_thread_count {
-            if self.context.thread_closing[i].load(Ordering::SeqCst) == true {
+            if self.context.thread_closing[i].load(Ordering::SeqCst) > 0 {
                 new_index = i;
                 break;
             }
@@ -808,7 +805,7 @@ impl Eq for ThreadPool {}
 fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>, 
                  receiver: Arc<Receiver<Thunk<'static>>>,
                  num_jobs: Arc<AtomicUsize>,
-                 thread_closing: Arc<AtomicBool>) {
+                 thread_closing: Arc<AtomicI8>) {
     let mut builder = thread::Builder::new();
     if let Some(ref name) = shared_data.name {
         builder = builder.name(name.clone());
@@ -820,7 +817,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
         .spawn(move || {
             // Will spawn a new thread on panic unless it is cancelled.
             let sentinel = Sentinel::new(&shared_data, &receiver, &num_jobs, &thread_closing);
-            thread_closing.swap(false, Ordering::SeqCst);
+            thread_closing.swap(0, Ordering::SeqCst);
 
             loop {
                 // Shutdown this thread if the pool has become smaller
@@ -854,7 +851,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 }
             }
 
-            thread_closing.swap(true, Ordering::SeqCst);
+            thread_closing.swap(2, Ordering::SeqCst);
             sentinel.cancel();
         })
         .unwrap();
