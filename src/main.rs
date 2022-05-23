@@ -38,13 +38,17 @@ fn main() {
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
-        // if i < 3 {
-        //     thread_pool.spawn_extra_one_worker();
-        // }
+        if i < 3 {
+            thread_pool.spawn_extra_one_worker();
+        }
+
+        if i == 8 {
+            thread_pool.shutdown_one_worker();
+        }
     }
     thread_pool.join();
 
-    rx.iter().take(n_jobs+1).fold(0, |i, j| {
+    rx.iter().take(n_jobs+8).fold(0, |i, j| {
         trace!("Hello, world: {}, {}.", i, j);
         i+j
     });

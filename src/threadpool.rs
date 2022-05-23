@@ -689,6 +689,40 @@ impl ThreadPool {
 
     }
 
+    pub fn shutdown_one_worker(&self) {
+        if self.shared_data.num_workers.load(Ordering::SeqCst) <= 0 {
+            warn!("No thread to shutdown");
+            ()
+        }
+
+        let mut shutdown_completed = false;
+        let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
+        while !shutdown_completed {
+            let mut target_thread_id = max_thread_count + 1;
+            let mut min_num_of_jobs = 0;
+
+            for i in 0..max_thread_count {
+                if self.context.thread_closing[i].load(Ordering::Relaxed) > 0 {
+                    continue;
+                }
+
+                if target_thread_id > max_thread_count || 
+                    min_num_of_jobs > self.context.queued_count[i].load(Ordering::Relaxed) {
+                        target_thread_id = i;
+                        min_num_of_jobs = self.context.queued_count[i].load(Ordering::Acquire);
+                }
+            }
+
+            // CAS to check if the target thread is still running.
+            if self.context.thread_closing[target_thread_id].compare_exchange(0,
+                                                                              2,
+                                                                              Ordering::SeqCst,
+                                                                              Ordering::Relaxed) == Ok(0) {
+                break;
+            } 
+        }
+    }
+
     /// Block the current thread until all jobs in the pool have been executed.
     ///
     /// Calling `join` on an empty pool will cause an immediate return.
@@ -873,8 +907,8 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                     }
                 }
 
-                thread_closing.compare_exchange(0, 
-                                                2, 
+                thread_closing.compare_exchange(2, 
+                                                3, 
                                                 Ordering::SeqCst, 
                                                 Ordering::Acquire);
                 sentinel.cancel();
