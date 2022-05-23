@@ -199,7 +199,10 @@ impl<'a> Drop for Sentinel<'a> {
         if self.active {
             self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
             self.shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-            self.thread_closing.swap(2, Ordering::SeqCst);
+            self.thread_closing.compare_exchange(2, 
+                                                 3, 
+                                                 Ordering::SeqCst, 
+                                                 Ordering::Acquire);
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
@@ -207,6 +210,10 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.no_work_notify_all();
             }
 
+            self.thread_closing.compare_exchange(3, 
+                                                 1, 
+                                                 Ordering::SeqCst, 
+                                                 Ordering::Acquire);
             spawn_in_pool(self.shared_data.clone(), 
                           self.receiver.clone(), 
                           self.num_jobs.clone(), 
@@ -374,7 +381,7 @@ impl Builder {
             num_jobs_list.push(Arc::new(AtomicUsize::new(0)));
             sender_list.push(tx);
             receiver_list.push(Arc::new(rx));
-            thread_closing_list.push(Arc::new(AtomicI8::new(2)));
+            thread_closing_list.push(Arc::new(AtomicI8::new(1)));
         }
 
         let context = Arc::new(ThreadPoolContext {
@@ -483,32 +490,43 @@ impl ThreadPool {
         F: FnOnce() + Send + 'static,
     {
         let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
-        let mut target_thread_id = max_thread_count + 1;
-        let mut min_jobs_counted: usize = 0;
-        for i in 0..max_thread_count {
-            if self.context.thread_closing[i].load(Ordering::Acquire) > 0 {
-                // The thread is closed or about to close.
-                continue;
+
+        let mut task_scheduled = false;
+        while !task_scheduled {
+            let mut target_thread_id = max_thread_count + 1;
+            let mut min_jobs_counted: usize = 0;
+            for i in 0..max_thread_count {
+                if self.context.thread_closing[i].load(Ordering::Acquire) > 0 {
+                    // The thread is closed or about to close.
+                    continue;
+                }
+                if self.context.queued_count[i].load(Ordering::Relaxed) == 0 {
+                    target_thread_id = i;
+                    min_jobs_counted = 0;
+                    break;
+                }
+                if target_thread_id > max_thread_count 
+                    || self.context.queued_count[i].load(Ordering::Relaxed) < min_jobs_counted {
+                    target_thread_id = i;
+                    min_jobs_counted = self.context.queued_count[i].load(Ordering::Relaxed);
+                }
             }
-            if self.context.queued_count[i].load(Ordering::Relaxed) == 0 {
-                target_thread_id = i;
-                min_jobs_counted = 0;
+
+            trace!("Target thread id: {}.", target_thread_id);
+
+            if self.context.thread_closing[target_thread_id].compare_exchange(0, 
+                                                                              0, 
+                                                                              Ordering::SeqCst, 
+                                                                              Ordering::Relaxed) == Ok(0) {
+                self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
+                self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
+                self.context.senders[target_thread_id]
+                    .send(Box::new(job))
+                    .expect("ThreadPool::execute unable to send job into queue.");
+                task_scheduled = true;
                 break;
             }
-            if target_thread_id > max_thread_count 
-                || self.context.queued_count[i].load(Ordering::Relaxed) < min_jobs_counted {
-                target_thread_id = i;
-                min_jobs_counted = self.context.queued_count[i].load(Ordering::Relaxed);
-            }
         }
-
-        trace!("Target thread id: {}.", target_thread_id);
-
-        self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
-        self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
-        self.context.senders[target_thread_id]
-            .send(Box::new(job))
-            .expect("ThreadPool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -656,16 +674,19 @@ impl ThreadPool {
         let mut new_index: usize = 0;
         let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
         for i in 0..max_thread_count {
-            if self.context.thread_closing[i].load(Ordering::SeqCst) > 0 {
-                new_index = i;
+            if self.context.thread_closing[i].compare_exchange(3, 
+                                                               1, 
+                                                               Ordering::SeqCst, 
+                                                               Ordering::Acquire) == Ok(3) {
+                // If one thread is closed, we will try to open this thread.
+                spawn_in_pool(self.shared_data.clone(), 
+                              self.context.receivers[i].clone(), 
+                              self.context.queued_count[i].clone(),
+                              self.context.thread_closing[i].clone());
                 break;
             }
         }
 
-        spawn_in_pool(self.shared_data.clone(), 
-                      self.context.receivers[new_index].clone(), 
-                      self.context.queued_count[new_index].clone(),
-                      self.context.thread_closing[new_index].clone());
     }
 
     /// Block the current thread until all jobs in the pool have been executed.
@@ -817,42 +838,47 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
         .spawn(move || {
             // Will spawn a new thread on panic unless it is cancelled.
             let sentinel = Sentinel::new(&shared_data, &receiver, &num_jobs, &thread_closing);
-            thread_closing.swap(0, Ordering::SeqCst);
+            // thread_closing.swap(0, Ordering::SeqCst);
 
-            loop {
-                // Shutdown this thread if the pool has become smaller
-                let thread_counter_val = shared_data.num_workers.load(Ordering::Acquire);
-                let max_thread_count_val = shared_data.max_thread_count.load(Ordering::Relaxed);
-                if thread_counter_val > max_thread_count_val 
-                    && num_jobs.load(Ordering::Acquire) == 0 {
-                    break;
+            if thread_closing.compare_exchange(1, 0, Ordering::SeqCst, Ordering::Acquire) == Ok(1) {
+                loop {
+                    // Shutdown this thread if the pool has become smaller
+                    let thread_counter_val = shared_data.num_workers.load(Ordering::Acquire);
+                    let max_thread_count_val = shared_data.max_thread_count.load(Ordering::Relaxed);
+                    if thread_counter_val > max_thread_count_val 
+                        && num_jobs.load(Ordering::Acquire) == 0 {
+                        break;
+                    }
+                    let message = {
+                        // Each thread will have a job queue, thread will fetch its own
+                        // work from its job queue.
+                        receiver.recv()
+                    };
+
+                    let job = match message {
+                        Ok(job) => job,
+                        // The ThreadPool was dropped.
+                        Err(..) => break,
+                    };
+                    // Do not allow IR around the job execution
+                    shared_data.active_count.fetch_add(1, Ordering::SeqCst);
+                    shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
+                    num_jobs.fetch_sub(1, Ordering::SeqCst);
+
+                    job.call_box();
+
+                    shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
+                    if num_jobs.load(Ordering::Acquire) == 0 {
+                        shared_data.no_work_notify_all();
+                    }
                 }
-                let message = {
-                    // Each thread will have a job queue, thread will fetch its own
-                    // work from its job queue.
-                    receiver.recv()
-                };
 
-                let job = match message {
-                    Ok(job) => job,
-                    // The ThreadPool was dropped.
-                    Err(..) => break,
-                };
-                // Do not allow IR around the job execution
-                shared_data.active_count.fetch_add(1, Ordering::SeqCst);
-                shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
-                num_jobs.fetch_sub(1, Ordering::SeqCst);
-
-                job.call_box();
-
-                shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-                if num_jobs.load(Ordering::Acquire) == 0 {
-                    shared_data.no_work_notify_all();
-                }
+                thread_closing.compare_exchange(0, 
+                                                2, 
+                                                Ordering::SeqCst, 
+                                                Ordering::Acquire);
+                sentinel.cancel();
             }
-
-            thread_closing.swap(2, Ordering::SeqCst);
-            sentinel.cancel();
         })
         .unwrap();
 }
