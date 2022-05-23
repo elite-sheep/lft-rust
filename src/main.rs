@@ -42,7 +42,7 @@ fn main() {
             thread_pool.spawn_extra_one_worker();
         }
 
-        if i == 8 {
+        if i == 1 {
             thread_pool.shutdown_one_worker();
         }
     }

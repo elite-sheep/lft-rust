@@ -178,7 +178,6 @@ impl<'a> Sentinel<'a> {
            receiver: &'a Arc<Receiver<Thunk<'static>>>,
            num_jobs: &'a Arc<AtomicUsize>,
            thread_closing: &'a Arc<AtomicI8>) -> Sentinel<'a> {
-        shared_data.num_workers.fetch_add(1, Ordering::SeqCst);
         Sentinel {
             shared_data: shared_data,
             receiver: receiver,
@@ -197,12 +196,8 @@ impl<'a> Sentinel<'a> {
 impl<'a> Drop for Sentinel<'a> {
     fn drop(&mut self) {
         if self.active {
-            self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
             self.shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-            self.thread_closing.compare_exchange(2, 
-                                                 3, 
-                                                 Ordering::SeqCst, 
-                                                 Ordering::Acquire);
+            self.thread_closing.store(3, Ordering::Release);
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
@@ -210,10 +205,7 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.no_work_notify_all();
             }
 
-            self.thread_closing.compare_exchange(3, 
-                                                 1, 
-                                                 Ordering::SeqCst, 
-                                                 Ordering::Acquire);
+            self.thread_closing.store(1, Ordering::Release);
             spawn_in_pool(self.shared_data.clone(), 
                           self.receiver.clone(), 
                           self.num_jobs.clone(), 
@@ -516,7 +508,7 @@ impl ThreadPool {
 
             if self.context.thread_closing[target_thread_id].compare_exchange(0, 
                                                                               0, 
-                                                                              Ordering::SeqCst, 
+                                                                              Ordering::Acquire, 
                                                                               Ordering::Relaxed) == Ok(0) {
                 self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
                 self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
@@ -665,7 +657,7 @@ impl ThreadPool {
     // }
 
     pub fn spawn_extra_one_worker(&self) {
-        if self.shared_data.num_workers.load(Ordering::Relaxed) 
+        if self.shared_data.num_workers.load(Ordering::Acquire) 
             > self.shared_data.max_thread_count.load(Ordering::Relaxed) {
                 warn!("Max thread number exceeded.");
                 ()
@@ -690,7 +682,7 @@ impl ThreadPool {
     }
 
     pub fn shutdown_one_worker(&self) {
-        if self.shared_data.num_workers.load(Ordering::SeqCst) <= 0 {
+        if self.shared_data.num_workers.load(Ordering::Acquire) <= 0 {
             warn!("No thread to shutdown");
             ()
         }
@@ -874,7 +866,8 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
             let sentinel = Sentinel::new(&shared_data, &receiver, &num_jobs, &thread_closing);
             // thread_closing.swap(0, Ordering::SeqCst);
 
-            if thread_closing.compare_exchange(1, 0, Ordering::SeqCst, Ordering::Acquire) == Ok(1) {
+            if thread_closing.compare_exchange(1, 0, Ordering::Acquire, Ordering::Relaxed) == Ok(1) {
+                shared_data.num_workers.fetch_add(1, Ordering::SeqCst);
                 loop {
                     // Shutdown this thread if the pool has become smaller
                     let thread_counter_val = shared_data.num_workers.load(Ordering::Acquire);
@@ -907,10 +900,8 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                     }
                 }
 
-                thread_closing.compare_exchange(2, 
-                                                3, 
-                                                Ordering::SeqCst, 
-                                                Ordering::Acquire);
+                shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
+                thread_closing.store(3, Ordering::Relaxed); 
                 sentinel.cancel();
             }
         })
