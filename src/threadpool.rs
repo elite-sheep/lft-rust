@@ -919,25 +919,30 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                     };
                     // Do not allow IR around the job execution
                     shared_data.active_count.fetch_add(1, Ordering::SeqCst);
-                    shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
                     num_jobs.fetch_sub(1, Ordering::SeqCst);
 
                     job.call_box();
 
+                    shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
                     shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
                     if num_jobs.load(Ordering::Acquire) == 0 {
                         shared_data.no_work_notify_all();
                     }
                 }
+
                 if thread_closing.compare_exchange(0, 
                                                    3, 
-                                                   Ordering::Acquire, 
+                                                   Ordering::SeqCst, 
                                                    Ordering::Relaxed) == Ok(0) {
                     shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
                 } else {
-                    thread_closing.store(3, Ordering::SeqCst); 
+                    let _ = thread_closing.compare_exchange(2, 
+                                                            3, 
+                                                            Ordering::SeqCst, 
+                                                            Ordering::Relaxed);
                 }
             }
+
             sentinel.cancel();
         })
         .unwrap();
