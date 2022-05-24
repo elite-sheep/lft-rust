@@ -30,7 +30,7 @@ fn main() {
         trace!("hello, world: {} times.", i);
         let tx = tx.clone();
         thread_pool.execute(move || {
-            trace!("hello, world: {}.", i);
+            // trace!("hello, world: {}.", i);
             let ten_millis = time::Duration::from_millis(128);
             let now = time::Instant::now();
 

@@ -585,6 +585,11 @@ impl ThreadPool {
         self.shared_data.max_thread_count.load(Ordering::Relaxed)
     }
 
+    /// Returns the number of workers running in the threadpool.
+    pub fn num_workers(&self) -> usize {
+        self.shared_data.num_workers.load(Ordering::Relaxed)
+    }
+
     /// Returns the number of panicked threads over the lifetime of the pool.
     ///
     /// # Examples
@@ -852,6 +857,7 @@ impl fmt::Debug for ThreadPool {
             .field("queued_count", &self.queued_count())
             .field("active_count", &self.active_count())
             .field("max_count", &self.max_count())
+            .field("num_workers", &self.num_workers())
             .finish()
     }
 }
@@ -924,7 +930,14 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                         shared_data.no_work_notify_all();
                     }
                 }
-                thread_closing.store(3, Ordering::SeqCst); 
+                if thread_closing.compare_exchange(0, 
+                                                   3, 
+                                                   Ordering::Acquire, 
+                                                   Ordering::Acquire) == Ok(0) {
+                    shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
+                } else {
+                    thread_closing.store(3, Ordering::SeqCst); 
+                }
             }
             sentinel.cancel();
         })
