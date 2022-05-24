@@ -5,8 +5,8 @@ extern crate pretty_env_logger;
 
 use crossbeam_channel::unbounded;
 
-mod naive_threadpool;
-use naive_threadpool::{ NaiveThreadPool };
+// mod naive_threadpool;
+// use naive_threadpool::{ NaiveThreadPool };
 
 use std::{thread, time};
 
@@ -24,7 +24,6 @@ use ndarray::{arr1, Array, Array1};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 
-use std::{thread, time};
 use rand::Rng;
 
 // #[derive(Debug)]
@@ -52,10 +51,10 @@ fn main() {
         let tx = tx.clone();
         thread_pool.execute(move || {
             trace!("hello, world: {}.", i);
-            let ten_millis = time::Duration::from_millis(128);
-            let now = time::Instant::now();
+            // let ten_millis = time::Duration::from_millis(128);
+            // let now = time::Instant::now();
 
-            thread::sleep(ten_millis);
+            // thread::sleep(ten_millis);
 
             // trace!("hello, world");
             // multiply_random_matrix();
