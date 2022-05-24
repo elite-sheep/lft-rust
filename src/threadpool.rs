@@ -197,7 +197,7 @@ impl<'a> Drop for Sentinel<'a> {
     fn drop(&mut self) {
         if self.active {
             self.shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-            self.thread_closing.store(3, Ordering::Release);
+            self.thread_closing.store(3, Ordering::Relaxed);
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
@@ -205,7 +205,7 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.no_work_notify_all();
             }
 
-            self.thread_closing.store(1, Ordering::Release);
+            self.thread_closing.store(1, Ordering::Relaxed);
             spawn_in_pool(self.shared_data.clone(), 
                           self.receiver.clone(), 
                           self.num_jobs.clone(), 
