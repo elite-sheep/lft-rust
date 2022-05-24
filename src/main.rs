@@ -5,8 +5,8 @@ extern crate pretty_env_logger;
 
 use crossbeam_channel::unbounded;
 
-// mod naive_threadpool;
-// use naive_threadpool::{ NaiveThreadPool };
+mod naive_threadpool;
+use naive_threadpool::{ NaiveThreadPool };
 
 use std::{thread, time};
 
@@ -24,6 +24,8 @@ use ndarray_rand::RandomExt;
 use ndarray_rand::rand_distr::Uniform;
 
 use rand::Rng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 // #[derive(Debug)]
 // struct Array {
@@ -35,17 +37,17 @@ fn main() {
     pretty_env_logger::init();
     let now = SystemTime::now();
 
-    let n_workers = 4;
-    let n_jobs = 8;
+    let n_workers = 8;
+    let n_tasks = 128;
     let thread_pool = threadpool::builder()
-        .num_workers(4)
+        .num_workers(n_workers)
         .max_thread_count(16)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
 
     let (tx, rx) = unbounded();
-    for i in 0..n_jobs+8 {
+    for i in 0..n_tasks {
         // trace!("hello, world: {} times.", i);
         let tx = tx.clone();
         thread_pool.execute(move || {
@@ -69,8 +71,8 @@ fn main() {
     }
     thread_pool.join();
 
-    rx.iter().take(n_jobs+1).fold(0, |i, j| {
-        trace!("Hello, world: {}, {}.", i, j);
+    rx.iter().take(n_tasks).fold(0, |i, j| {
+        // trace!("Hello, world: {}, {}.", i, j);
         i+j
     });
     
@@ -105,7 +107,8 @@ fn multiply_random_matrix() {
 
 
 fn multiply_matrices() {
-    let matrix_size = rand::thread_rng().gen_range(1800..2200);
+    let mut rng = StdRng::seed_from_u64(2);
+    let matrix_size = rng.gen_range(1024..2048);
 
     //generate random matrices of size 1000*1000
     let a = Array::random((matrix_size, matrix_size), Uniform::new(0.0_f32, 10.0_f32));

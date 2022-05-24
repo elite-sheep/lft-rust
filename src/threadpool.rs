@@ -505,7 +505,7 @@ impl ThreadPool {
             }
         }
 
-        trace!("Target thread id: {}.", target_thread_id);
+        // trace!("Target thread id: {}.", target_thread_id);
 
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
         self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
