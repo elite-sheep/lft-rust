@@ -12,7 +12,6 @@ use std::{thread, time};
 
 mod threadpool;
 use threadpool::{ ThreadPool };
-#[macro_use] extern crate queues;
 
 
 extern crate npy;
@@ -47,10 +46,10 @@ fn main() {
 
     let (tx, rx) = unbounded();
     for i in 0..n_jobs+8 {
-        trace!("hello, world: {} times.", i);
+        // trace!("hello, world: {} times.", i);
         let tx = tx.clone();
         thread_pool.execute(move || {
-            trace!("hello, world: {}.", i);
+            // trace!("hello, world: {}.", i);
             // let ten_millis = time::Duration::from_millis(128);
             // let now = time::Instant::now();
 
@@ -76,7 +75,7 @@ fn main() {
     });
     
     let since_the_epoch = now.elapsed();
-    println!("Time duration: {:?}ms", since_the_epoch.unwrap().as_millis());
+    trace!("Time duration: {:?}ms", since_the_epoch.unwrap().as_millis());
     // generate_random_matrices(3, 4);
 }
 
