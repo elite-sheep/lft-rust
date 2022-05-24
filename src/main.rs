@@ -65,9 +65,13 @@ fn main() {
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
-        // if i < 3 {
-        //     thread_pool.spawn_extra_one_worker();
-        // }
+        if i < 4 {
+            thread_pool.spawn_extra_one_worker();
+        }
+
+        if i == 1 || i == 2 || i == 5 || i == 6 {
+            thread_pool.shutdown_one_worker();
+        }
     }
     thread_pool.join();
 
