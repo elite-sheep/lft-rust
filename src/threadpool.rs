@@ -671,16 +671,10 @@ impl ThreadPool {
                 warn!("Max thread number exceeded.");
                 ()
         } 
-        self.shared_data.num_workers.fetch_add(1, Ordering::Acquire);
+        self.shared_data.num_workers.fetch_add(1, Ordering::SeqCst);
 
         let mut spawn_completed = false;
         while !spawn_completed {
-            if self.shared_data.num_workers.load(Ordering::Acquire) 
-                >= self.shared_data.max_thread_count.load(Ordering::Relaxed) {
-                    warn!("Max thread number exceeded.");
-                    break;
-            } 
-
             let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
             for i in 0..max_thread_count {
                 if self.context.thread_closing[i].compare_exchange(3, 
@@ -696,6 +690,12 @@ impl ThreadPool {
                     break;
                 }
             }
+
+            if self.shared_data.num_workers.load(Ordering::SeqCst) 
+                >= self.shared_data.max_thread_count.load(Ordering::Relaxed) {
+                    warn!("Max thread number exceeded.");
+                    break;
+            } 
             let ten_millis = time::Duration::from_millis(10);
             thread::sleep(ten_millis);
         }
@@ -703,18 +703,13 @@ impl ThreadPool {
     }
 
     pub fn shutdown_one_worker(&self) {
-        if self.shared_data.num_workers.load(Ordering::Acquire) <= 0 {
+        if self.shared_data.num_workers.load(Ordering::SeqCst) <= 0 {
             warn!("No thread to shutdown");
             ()
         }
-        self.shared_data.num_workers.fetch_sub(1, Ordering::Acquire);
+        self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
 
         while true {
-            if self.shared_data.num_workers.load(Ordering::Acquire) <= 0 {
-                warn!("No thread to shutdown");
-                break;
-            }
-
             let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
             let mut target_thread_id = max_thread_count + 1;
             let mut min_num_of_jobs = 0;
@@ -741,6 +736,10 @@ impl ThreadPool {
                     break;
             }
            
+            if self.shared_data.num_workers.load(Ordering::SeqCst) <= 0 {
+                warn!("No thread to shutdown");
+                break;
+            }
             let ten_millis = time::Duration::from_millis(10);
             thread::sleep(ten_millis);
         }
@@ -904,7 +903,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                     // let thread_counter_val = shared_data.num_workers.load(Ordering::Acquire);
                     // let max_thread_count_val = shared_data.max_thread_count.load(Ordering::Relaxed);
                     if thread_closing.load(Ordering::Acquire) == 2
-                        && num_jobs.load(Ordering::Acquire) == 0 {
+                        && num_jobs.load(Ordering::SeqCst) == 0 {
                         break;
                     }
                     let message = {
@@ -933,7 +932,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 if thread_closing.compare_exchange(0, 
                                                    3, 
                                                    Ordering::Acquire, 
-                                                   Ordering::Acquire) == Ok(0) {
+                                                   Ordering::Relaxed) == Ok(0) {
                     shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
                 } else {
                     thread_closing.store(3, Ordering::SeqCst); 
