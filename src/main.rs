@@ -19,8 +19,8 @@ fn main() {
     let n_workers = 4;
     let n_jobs = 8;
     let thread_pool = threadpool::builder()
-        .num_workers(4)
-        .max_thread_count(16)
+        .num_workers(1)
+        .max_thread_count(8)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
@@ -38,11 +38,11 @@ fn main() {
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
-        if i < 3 {
+        if i < 4 {
             thread_pool.spawn_extra_one_worker();
         }
 
-        if i == 1 {
+        if i == 1 || i == 2 || i == 5 || i == 6 {
             thread_pool.shutdown_one_worker();
         }
     }
