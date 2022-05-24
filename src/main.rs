@@ -38,11 +38,12 @@ fn main() {
     let now = SystemTime::now();
 
     let n_workers = 8;
-    let n_tasks = 128;
-    let thread_pool = threadpool::builder()
+    let n_tasks = 192;
+    let max_threads = 8;
+    let thread_pool = naive_threadpool::builder()
         .num_workers(n_workers)
-        .max_thread_count(16)
-        .thread_stack_size(8 * 1024 * 1024)
+        // .max_thread_count(max_threads)
+        .thread_stack_size(max_threads * 1024 * 1024)
         .build();
     // thread_pool.start();
 
@@ -65,13 +66,13 @@ fn main() {
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
-        if i < 4 {
-            thread_pool.spawn_extra_one_worker();
-        }
+        // if i < 4 {
+        //     thread_pool.spawn_extra_one_worker();
+        // }
 
-        if i == 1 || i == 2 || i == 5 || i == 6 {
-            thread_pool.shutdown_one_worker();
-        }
+        // if i == 1 || i == 2 || i == 5 || i == 6 {
+        //     thread_pool.shutdown_one_worker();
+        // }
     }
     thread_pool.join();
 

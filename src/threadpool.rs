@@ -511,7 +511,7 @@ impl ThreadPool {
 
             if target_thread_id < max_thread_count && 
                 self.context.thread_closing[target_thread_id].load(Ordering::SeqCst) == 0 {
-                trace!("Target thread id: {}.", target_thread_id);
+                // trace!("Target thread id: {}.", target_thread_id);
                 self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
                 self.context.queued_count[target_thread_id].fetch_add(1, Ordering::SeqCst);
                 self.context.senders[target_thread_id]
@@ -520,8 +520,8 @@ impl ThreadPool {
                 task_scheduled = true;
                 break;
             }
-            let ten_millis = time::Duration::from_millis(10);
-            thread::sleep(ten_millis);
+            // let ten_millis = time::Duration::from_millis(10);
+            // thread::sleep(ten_millis);
         }
     }
 
@@ -696,8 +696,8 @@ impl ThreadPool {
                     warn!("Max thread number exceeded.");
                     break;
             } 
-            let ten_millis = time::Duration::from_millis(10);
-            thread::sleep(ten_millis);
+            // let ten_millis = time::Duration::from_millis(10);
+            // thread::sleep(ten_millis);
         }
 
     }
@@ -740,8 +740,8 @@ impl ThreadPool {
                 warn!("No thread to shutdown");
                 break;
             }
-            let ten_millis = time::Duration::from_millis(10);
-            thread::sleep(ten_millis);
+            //let ten_millis = time::Duration::from_millis(10);
+            //thread::sleep(ten_millis);
         }
     }
 
