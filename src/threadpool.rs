@@ -687,9 +687,8 @@ impl ThreadPool {
             ()
         }
 
-        let mut shutdown_completed = false;
         let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
-        while !shutdown_completed {
+        while true {
             let mut target_thread_id = max_thread_count + 1;
             let mut min_num_of_jobs = 0;
 
