@@ -40,10 +40,10 @@ fn main() {
     let n_workers = 8;
     let n_tasks = 192;
     let max_threads = 8;
-    let thread_pool = naive_threadpool::builder()
+    let thread_pool = threadpool::builder()
         .num_workers(n_workers)
         // .max_thread_count(max_threads)
-        .thread_stack_size(max_threads * 1024 * 1024)
+        .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
 
@@ -116,8 +116,8 @@ fn multiply_matrices() {
     let matrix_size = rng.gen_range(1024..2048);
 
     //generate random matrices of size 1000*1000
-    let a = Array::random((matrix_size, matrix_size), Uniform::new(0.0_f32, 10.0_f32));
-    let b = Array::random((matrix_size, matrix_size), Uniform::new(0.0_f32, 10.0_f32));
+    let a = Array::random((matrix_size, matrix_size), Uniform::new(-1.0_f32, 1.0_f32));
+    let b = Array::random((matrix_size, matrix_size), Uniform::new(-1.0_f32, 1.0_f32));
 
     //transpose data2
     // let data1_len = data1.len();
