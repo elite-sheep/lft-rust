@@ -38,11 +38,11 @@ fn main() {
     let now = SystemTime::now();
 
     let n_workers = 8;
-    let n_tasks = 192;
+    let n_tasks = 256;
     let max_threads = 8;
     let thread_pool = threadpool::builder()
         .num_workers(n_workers)
-        // .max_thread_count(max_threads)
+        .max_thread_count(max_threads)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
@@ -77,7 +77,7 @@ fn main() {
     thread_pool.join();
 
     rx.iter().take(n_tasks).fold(0, |i, j| {
-        // trace!("Hello, world: {}, {}.", i, j);
+        trace!("Hello, world: {}, {}.", i, j);
         i+j
     });
     
@@ -112,8 +112,8 @@ fn multiply_random_matrix() {
 
 
 fn multiply_matrices() {
-    let mut rng = StdRng::seed_from_u64(2);
-    let matrix_size = rng.gen_range(1024..2048);
+    let mut rng = StdRng::seed_from_u64(2022);
+    let matrix_size = rng.gen_range(3600..4400);
 
     //generate random matrices of size 1000*1000
     let a = Array::random((matrix_size, matrix_size), Uniform::new(-1.0_f32, 1.0_f32));
