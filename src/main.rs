@@ -35,19 +35,21 @@ use rand::rngs::StdRng;
 
 fn main() {
     pretty_env_logger::init();
-    let now = SystemTime::now();
 
-    let n_workers = 8;
-    let n_tasks = 256;
-    let max_threads = 8;
-    let thread_pool = threadpool::builder()
+    let n_workers = 4;
+    let n_tasks = 16384;
+    let max_threads = 4;
+    let thread_pool = naive_threadpool::builder()
         .num_workers(n_workers)
-        .max_thread_count(max_threads)
+        // .max_thread_count(max_threads)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
     // thread_pool.start();
 
+    let mut rng = StdRng::seed_from_u64(2022);
+    let sleep_duration = time::Duration::from_millis(128);
     let (tx, rx) = unbounded();
+    let now = SystemTime::now();
     for i in 0..n_tasks {
         // trace!("hello, world: {} times.", i);
         let tx = tx.clone();
@@ -66,6 +68,10 @@ fn main() {
             tx.send(1).expect("channel will be there waiting for the pool");
         });
         
+        let p = rng.gen_range(0.0_f32..1.0_f32);
+        if p < 0.02 {
+            thread::sleep(sleep_duration);
+        }
         // if i < 4 {
         //     thread_pool.spawn_extra_one_worker();
         // }
@@ -113,7 +119,7 @@ fn multiply_random_matrix() {
 
 fn multiply_matrices() {
     let mut rng = StdRng::seed_from_u64(2022);
-    let matrix_size = rng.gen_range(3600..4400);
+    let matrix_size = rng.gen_range(1800..2200);
 
     //generate random matrices of size 1000*1000
     let a = Array::random((matrix_size, matrix_size), Uniform::new(-1.0_f32, 1.0_f32));

@@ -197,7 +197,7 @@ impl<'a> Drop for Sentinel<'a> {
     fn drop(&mut self) {
         if self.active {
             self.shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-            self.thread_closing.store(3, Ordering::Relaxed);
+            self.thread_closing.store(3, Ordering::SeqCst);
             if thread::panicking() {
                 self.shared_data.panic_count.fetch_add(1, Ordering::SeqCst);
             }
@@ -205,7 +205,7 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.no_work_notify_all();
             }
 
-            self.thread_closing.store(1, Ordering::Relaxed);
+            self.thread_closing.store(1, Ordering::SeqCst);
             spawn_in_pool(self.shared_data.clone(), 
                           self.receiver.clone(), 
                           self.num_jobs.clone(), 
@@ -402,11 +402,16 @@ impl Builder {
         });
 
         // Threadpool threads
-        for i in 0..num_workers {
+        let sleep_duration = time::Duration::from_millis(8);
+        for i in 0..max_thread_count {
             spawn_in_pool(shared_data.clone(), 
                           receiver_list[i].clone(), 
                           num_jobs_list[i].clone(),
                           thread_closing_list[i].clone());
+
+            while thread_closing_list[i].load(Ordering::SeqCst) != 0 {
+                thread::sleep(sleep_duration);
+            }
         }
 
         ThreadPool {
@@ -496,13 +501,13 @@ impl ThreadPool {
                     // The thread is closed or about to close.
                     continue;
                 }
-                if self.context.queued_count[i].load(Ordering::Relaxed) == 0 {
+                if self.context.queued_count[i].load(Ordering::SeqCst) == 0 {
                     target_thread_id = i;
                     min_jobs_counted = 0;
                     break;
                 }
                 if target_thread_id > max_thread_count 
-                    || self.context.queued_count[i].load(Ordering::Relaxed) < min_jobs_counted {
+                    || self.context.queued_count[i].load(Ordering::SeqCst) < min_jobs_counted {
                     target_thread_id = i;
                     min_jobs_counted = self.context.queued_count[i].load(Ordering::Relaxed);
                 }
@@ -897,12 +902,13 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
             let sentinel = Sentinel::new(&shared_data, &receiver, &num_jobs, &thread_closing);
             // thread_closing.swap(0, Ordering::SeqCst);
 
+            //trace!("try");
             if thread_closing.compare_exchange(1, 0, Ordering::SeqCst, Ordering::Relaxed) == Ok(1) {
                 loop {
                     // Shutdown this thread if the pool has become smaller
                     // let thread_counter_val = shared_data.num_workers.load(Ordering::Acquire);
                     // let max_thread_count_val = shared_data.max_thread_count.load(Ordering::Relaxed);
-                    if thread_closing.load(Ordering::Acquire) == 2
+                    if thread_closing.load(Ordering::SeqCst) == 2
                         && num_jobs.load(Ordering::SeqCst) == 0 {
                         break;
                     }
@@ -919,13 +925,13 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                     };
                     // Do not allow IR around the job execution
                     shared_data.active_count.fetch_add(1, Ordering::SeqCst);
-                    num_jobs.fetch_sub(1, Ordering::SeqCst);
 
                     job.call_box();
 
+                    num_jobs.fetch_sub(1, Ordering::SeqCst);
                     shared_data.queued_count.fetch_sub(1, Ordering::SeqCst);
                     shared_data.active_count.fetch_sub(1, Ordering::SeqCst);
-                    if num_jobs.load(Ordering::Acquire) == 0 {
+                    if num_jobs.load(Ordering::SeqCst) == 0 {
                         shared_data.no_work_notify_all();
                     }
                 }
@@ -943,6 +949,7 @@ fn spawn_in_pool(shared_data: Arc<ThreadPoolSharedData>,
                 }
             }
 
+            // trace!("end");
             sentinel.cancel();
         })
         .unwrap();
