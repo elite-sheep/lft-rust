@@ -36,9 +36,9 @@ use rand::rngs::StdRng;
 fn main() {
     pretty_env_logger::init();
 
-    let n_workers = 4;
+    let n_workers = 2;
     let n_tasks = 16384;
-    let max_threads = 4;
+    let max_threads = 2;
     let thread_pool = naive_threadpool::builder()
         .num_workers(n_workers)
         // .max_thread_count(max_threads)
