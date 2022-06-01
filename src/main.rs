@@ -13,7 +13,6 @@ use std::{thread, time};
 mod threadpool;
 use threadpool::{ ThreadPool };
 
-
 extern crate npy;
 
 use std::io::Read;
