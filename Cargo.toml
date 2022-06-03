@@ -2,9 +2,10 @@
 name = "lft-rust"
 version = "0.1.0"
 repository = "https://github.com/elite-sheep/lft-rust"
-readme = "./README.md"
+readme = "README.md"
+license = "MIT"
 keywords = [ "threadpool", "concurrency" ]
-categories = [ "multithreading", "high-performance computing" ]
+categories = [ "multithreading", "high-performance computing", "threading" ]
 rust-version = "1.57.0"
 edition = "2021"
 
