@@ -5,8 +5,8 @@ extern crate pretty_env_logger;
 
 use crossbeam_channel::unbounded;
 
-mod naive_threadpool;
-use naive_threadpool::{ NaiveThreadPool };
+mod single_queue_threadpool;
+use single_queue_threadpool::{ SingleQueueThreadPool };
 
 use std::{thread, time};
 
@@ -36,9 +36,9 @@ fn main() {
     pretty_env_logger::init();
 
     let n_workers = 2;
-    let n_tasks = 16384;
+    let n_tasks = 16;
     let max_threads = 2;
-    let thread_pool = naive_threadpool::builder()
+    let thread_pool = single_queue_threadpool::builder()
         .num_workers(n_workers)
         // .max_thread_count(max_threads)
         .thread_stack_size(8 * 1024 * 1024)
@@ -66,18 +66,6 @@ fn main() {
             // thread::sleep(time_to_sleep);
             tx.send(1).expect("channel will be there waiting for the pool");
         });
-        
-        let p = rng.gen_range(0.0_f32..1.0_f32);
-        if p < 0.02 {
-            thread::sleep(sleep_duration);
-        }
-        // if i < 4 {
-        //     thread_pool.spawn_extra_one_worker();
-        // }
-
-        // if i == 1 || i == 2 || i == 5 || i == 6 {
-        //     thread_pool.shutdown_one_worker();
-        // }
     }
     thread_pool.join();
 

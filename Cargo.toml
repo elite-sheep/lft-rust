@@ -1,6 +1,11 @@
 [package]
 name = "lft-rust"
 version = "0.1.0"
+repository = "https://github.com/elite-sheep/lft-rust"
+readme = "./README.md"
+keywords = [ "threadpool", "concurrency" ]
+categories = [ "multithreading", "high-performance computing" ]
+rust-version = "1.57.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
