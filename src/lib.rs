@@ -6,7 +6,9 @@ mod single_queue_threadpool;
 mod threadpool;
 
 pub use single_queue_threadpool::{ 
-    SingleQueueThreadPool 
+    SingleQueueBuilder,
+    SingleQueueThreadPool ,
+    single_queue_builder
 };
 
 pub use crate::threadpool::{

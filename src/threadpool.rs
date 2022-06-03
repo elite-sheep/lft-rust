@@ -714,7 +714,7 @@ impl ThreadPool {
         }
         self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
 
-        while true {
+        loop {
             let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
             let mut target_thread_id = max_thread_count + 1;
             let mut min_num_of_jobs = 0;
