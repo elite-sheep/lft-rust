@@ -6,7 +6,7 @@ mod single_queue_threadpool;
 mod threadpool;
 
 pub use single_queue_threadpool::{ 
-    SingleQueueThreadPool,
+    SingleQueueThreadpool,
     single_queue_threadpool_builder
 };
 

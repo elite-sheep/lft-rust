@@ -46,7 +46,7 @@
 //! https://doc.rust-lang.org/reference/behavior-not-considered-unsafe.html).
 //!
 //! ```
-//! use threadpool::SingleQueueThreadPool;
+//! use threadpool::SingleQueueThreadpool;
 //! use std::sync::{Arc, Barrier};
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
@@ -99,7 +99,7 @@ mod test;
 /// ```
 /// let pool = threadpool::auto_config();
 /// ```
-pub fn auto_config() -> SingleQueueThreadPool {
+pub fn auto_config() -> SingleQueueThreadpool {
     single_queue_threadpool_builder().build()
 }
 /// Initiate a new [`SingleQueueThreadpoolBuilder`].
@@ -131,9 +131,9 @@ pub const fn single_queue_threadpool_builder() -> SingleQueueThreadpoolBuilder {
 ///
 /// ```rust
 /// use std::thread;
-/// use threadpool::SingleQueueThreadPool;
+/// use threadpool::SingleQueueThreadpool;
 ///
-/// let pool = SingleQueueThreadPool::with_name("worker".into(), 2);
+/// let pool = SingleQueueThreadpool::with_name("worker".into(), 2);
 /// for _ in 0..2 {
 ///     pool.execute(|| {
 ///         assert_eq!(
@@ -146,7 +146,7 @@ pub const fn single_queue_threadpool_builder() -> SingleQueueThreadpoolBuilder {
 /// ```
 ///
 /// [thread name]: https://doc.rust-lang.org/std/thread/struct.Thread.html#method.name
-pub fn with_name<S: AsRef<str>>(name: S) -> SingleQueueThreadPool {
+pub fn with_name<S: AsRef<str>>(name: S) -> SingleQueueThreadpool {
     builder().worker_name(name).build()
 }
 */
@@ -164,12 +164,12 @@ impl<F: FnOnce()> FnBox for F {
 type Thunk<'a> = Box<dyn FnBox + Send + 'a>;
 
 struct Sentinel<'a> {
-    shared_data: &'a Arc<SingleQueueThreadPoolSharedData>,
+    shared_data: &'a Arc<SingleQueueThreadpoolSharedData>,
     active: bool,
 }
 
 impl<'a> Sentinel<'a> {
-    fn new(shared_data: &'a Arc<SingleQueueThreadPoolSharedData>) -> Sentinel<'a> {
+    fn new(shared_data: &'a Arc<SingleQueueThreadpoolSharedData>) -> Sentinel<'a> {
         Sentinel {
             shared_data: shared_data,
             active: true,
@@ -195,22 +195,22 @@ impl<'a> Drop for Sentinel<'a> {
     }
 }
 
-/// [`SingleQueueThreadPool`] factory, which can be used in order to configure the properties of the
-/// [`SingleQueueThreadPool`].
+/// [`SingleQueueThreadpool`] factory, which can be used in order to configure the properties of the
+/// [`SingleQueueThreadpool`].
 ///
 /// The three configuration options available:
 ///
 /// * `num_workers`: maximum number of threads that will be alive at any given moment by the built
-///   [`SingleQueueThreadPool`]
-/// * `worker_name`: thread name for each of the threads spawned by the built [`SingleQueueThreadPool`]
+///   [`SingleQueueThreadpool`]
+/// * `worker_name`: thread name for each of the threads spawned by the built [`SingleQueueThreadpool`]
 /// * `thread_stack_size`: stack size (in bytes) for each of the threads spawned by the built
-///   [`SingleQueueThreadPool`]
+///   [`SingleQueueThreadpool`]
 ///
-/// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
+/// [`SingleQueueThreadpool`]: struct.SingleQueueThreadpool.html
 ///
 /// # Examples
 ///
-/// Build a [`SingleQueueThreadPool`] that uses a maximum of eight threads simultaneously and each thread has
+/// Build a [`SingleQueueThreadpool`] that uses a maximum of eight threads simultaneously and each thread has
 /// a 8 MB stack size:
 ///
 /// ```
@@ -228,9 +228,9 @@ pub struct SingleQueueThreadpoolBuilder {
 
 impl SingleQueueThreadpoolBuilder {
     /// Set the maximum number of worker-threads that will be alive at any given moment by the built
-    /// [`SingleQueueThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
+    /// [`SingleQueueThreadpool`]. If not specified, defaults the number of threads to the number of CPUs.
     ///
-    /// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
+    /// [`SingleQueueThreadpool`]: struct.SingleQueueThreadpool.html
     ///
     /// # Panics
     ///
@@ -259,10 +259,10 @@ impl SingleQueueThreadpoolBuilder {
         self
     }
 
-    /// Set the thread name for each of the threads spawned by the built [`SingleQueueThreadPool`]. If not
+    /// Set the thread name for each of the threads spawned by the built [`SingleQueueThreadpool`]. If not
     /// specified, threads spawned by the thread pool will be unnamed.
     ///
-    /// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
+    /// [`SingleQueueThreadpool`]: struct.SingleQueueThreadpool.html
     ///
     /// # Examples
     ///
@@ -287,12 +287,12 @@ impl SingleQueueThreadpoolBuilder {
         self
     }
 
-    /// Set the stack size (in bytes) for each of the threads spawned by the built [`SingleQueueThreadPool`].
+    /// Set the stack size (in bytes) for each of the threads spawned by the built [`SingleQueueThreadpool`].
     /// If not specified, threads spawned by the threadpool will have a stack size [as specified in
     /// the `std::thread` documentation][thread].
     ///
     /// [thread]: https://doc.rust-lang.org/nightly/std/thread/index.html#stack-size
-    /// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
+    /// [`SingleQueueThreadpool`]: struct.SingleQueueThreadpool.html
     ///
     /// # Examples
     ///
@@ -314,10 +314,10 @@ impl SingleQueueThreadpoolBuilder {
         self
     }
 
-    /// Finalize the [`SingleQueueThreadpoolBuilder`] and build the [`SingleQueueThreadPool`].
+    /// Finalize the [`SingleQueueThreadpoolBuilder`] and build the [`SingleQueueThreadpool`].
     ///
     /// [`SingleQueueThreadpoolBuilder`]: struct.SingleQueueThreadpoolBuilder.html
-    /// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
+    /// [`SingleQueueThreadpool`]: struct.SingleQueueThreadpool.html
     ///
     /// # Examples
     ///
@@ -327,12 +327,12 @@ impl SingleQueueThreadpoolBuilder {
     ///     .thread_stack_size(16*1024*1024)
     ///     .build();
     /// ```
-    pub fn build(self) -> SingleQueueThreadPool {
+    pub fn build(self) -> SingleQueueThreadpool {
         let (tx, rx) = unbounded::<Thunk<'static>>();
 
         let num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
 
-        let shared_data = Arc::new(SingleQueueThreadPoolSharedData {
+        let shared_data = Arc::new(SingleQueueThreadpoolSharedData {
             name: self.worker_name,
             job_receiver: Mutex::new(rx),
             empty_condvar: Condvar::new(),
@@ -350,14 +350,14 @@ impl SingleQueueThreadpoolBuilder {
             spawn_in_pool(shared_data.clone());
         }
 
-        SingleQueueThreadPool {
+        SingleQueueThreadpool {
             jobs: tx,
             shared_data: shared_data,
         }
     }
 }
 
-struct SingleQueueThreadPoolSharedData {
+struct SingleQueueThreadpoolSharedData {
     name: Option<String>,
     job_receiver: Mutex<Receiver<Thunk<'static>>>,
     empty_trigger: Mutex<()>,
@@ -370,7 +370,7 @@ struct SingleQueueThreadPoolSharedData {
     stack_size: Option<usize>,
 }
 
-impl SingleQueueThreadPoolSharedData {
+impl SingleQueueThreadpoolSharedData {
     fn has_work(&self) -> bool {
         self.queued_count.load(Ordering::SeqCst) > 0 || self.active_count.load(Ordering::SeqCst) > 0
     }
@@ -388,16 +388,16 @@ impl SingleQueueThreadPoolSharedData {
 }
 
 /// Abstraction of a thread pool for basic parallelism.
-pub struct SingleQueueThreadPool {
+pub struct SingleQueueThreadpool {
     // How the threadpool communicates with subthreads.
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
     jobs: Sender<Thunk<'static>>,
-    shared_data: Arc<SingleQueueThreadPoolSharedData>,
+    shared_data: Arc<SingleQueueThreadpoolSharedData>,
 }
 
-impl SingleQueueThreadPool {
+impl SingleQueueThreadpool {
     /// Executes the function `job` on a thread in the pool.
     ///
     /// # Examples
@@ -419,7 +419,7 @@ impl SingleQueueThreadPool {
         self.shared_data.queued_count.fetch_add(1, Ordering::SeqCst);
         self.jobs
             .send(Box::new(job))
-            .expect("SingleQueueThreadPool::execute unable to send job into queue.");
+            .expect("SingleQueueThreadpool::execute unable to send job into queue.");
     }
 
     /// Returns the number of jobs waiting to executed in the pool.
@@ -427,7 +427,7 @@ impl SingleQueueThreadPool {
     /// # Examples
     ///
     /// ```
-    /// use threadpool::SingleQueueThreadPool;
+    /// use threadpool::SingleQueueThreadpool;
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
@@ -569,12 +569,12 @@ impl SingleQueueThreadPool {
     /// behavior is considered safe.
     ///
     /// **Note:** Join will not stop the worker threads. You will need to `drop`
-    /// all instances of `SingleQueueThreadPool` for the worker threads to terminate.
+    /// all instances of `SingleQueueThreadpool` for the worker threads to terminate.
     ///
     /// # Examples
     ///
     /// ```
-    /// use threadpool::SingleQueueThreadPool;
+    /// use threadpool::SingleQueueThreadpool;
     /// use std::sync::Arc;
     /// use std::sync::atomic::{AtomicUsize, Ordering};
     ///
@@ -616,7 +616,7 @@ impl SingleQueueThreadPool {
     }
 }
 
-impl Clone for SingleQueueThreadPool {
+impl Clone for SingleQueueThreadpool {
     /// Cloning a pool will create a new handle to the pool.
     /// The behavior is similar to [Arc](https://doc.rust-lang.org/stable/std/sync/struct.Arc.html).
     ///
@@ -652,17 +652,17 @@ impl Clone for SingleQueueThreadPool {
     ///
     /// assert_eq!(vec![66, 39916800], results);
     /// ```
-    fn clone(&self) -> SingleQueueThreadPool {
-        SingleQueueThreadPool {
+    fn clone(&self) -> SingleQueueThreadpool {
+        SingleQueueThreadpool {
             jobs: self.jobs.clone(),
             shared_data: self.shared_data.clone(),
         }
     }
 }
 
-impl fmt::Debug for SingleQueueThreadPool {
+impl fmt::Debug for SingleQueueThreadpool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SingleQueueThreadPool")
+        f.debug_struct("SingleQueueThreadpool")
             .field("name", &self.shared_data.name)
             .field("queued_count", &self.queued_count())
             .field("active_count", &self.active_count())
@@ -671,7 +671,7 @@ impl fmt::Debug for SingleQueueThreadPool {
     }
 }
 
-impl PartialEq for SingleQueueThreadPool {
+impl PartialEq for SingleQueueThreadpool {
     /// Check if you are working with the same pool
     ///
     /// ```
@@ -684,13 +684,13 @@ impl PartialEq for SingleQueueThreadPool {
     /// assert_ne!(a, b);
     /// assert_ne!(b, a);
     /// ```
-    fn eq(&self, other: &SingleQueueThreadPool) -> bool {
+    fn eq(&self, other: &SingleQueueThreadpool) -> bool {
         Arc::ptr_eq(&self.shared_data, &other.shared_data)
     }
 }
-impl Eq for SingleQueueThreadPool {}
+impl Eq for SingleQueueThreadpool {}
 
-fn spawn_in_pool(shared_data: Arc<SingleQueueThreadPoolSharedData>) {
+fn spawn_in_pool(shared_data: Arc<SingleQueueThreadpoolSharedData>) {
     let mut builder = thread::Builder::new();
     if let Some(ref name) = shared_data.name {
         builder = builder.name(name.clone());
@@ -722,7 +722,7 @@ fn spawn_in_pool(shared_data: Arc<SingleQueueThreadPoolSharedData>) {
 
                 let job = match message {
                     Ok(job) => job,
-                    // The SingleQueueThreadPool was dropped.
+                    // The SingleQueueThreadpool was dropped.
                     Err(..) => break,
                 };
                 // Do not allow IR around the job execution

@@ -4,9 +4,10 @@ extern crate pretty_env_logger;
 #[macro_use] extern crate log;
 
 extern crate lft_rust;
-use lft_rust::{ ThreadPool, 
+use lft_rust::{ 
     single_queue_threadpool_builder, 
-    lft_builder };
+    lft_builder 
+};
 
 use crossbeam_channel::unbounded;
 
