@@ -100,19 +100,19 @@ mod test;
 /// let pool = threadpool::auto_config();
 /// ```
 pub fn auto_config() -> SingleQueueThreadPool {
-    single_queue_builder().build()
+    single_queue_threadpool_builder().build()
 }
-/// Initiate a new [`SingleQueueBuilder`].
+/// Initiate a new [`SingleQueueThreadpoolBuilder`].
 ///
-/// [`SingleQueueBuilder`]: struct.SingleQueueBuilder.html
+/// [`SingleQueueThreadpoolBuilder`]: struct.SingleQueueThreadpoolBuilder.html
 ///
 /// # Examples
 ///
 /// ```
 /// let builder = threadpool::builder();
 /// ```
-pub const fn single_queue_builder() -> SingleQueueBuilder {
-    SingleQueueBuilder {
+pub const fn single_queue_threadpool_builder() -> SingleQueueThreadpoolBuilder {
+    SingleQueueThreadpoolBuilder {
         num_workers: None,
         worker_name: None,
         thread_stack_size: None,
@@ -220,13 +220,13 @@ impl<'a> Drop for Sentinel<'a> {
 ///     .build();
 /// ```
 #[derive(Clone, Default)]
-pub struct SingleQueueBuilder {
+pub struct SingleQueueThreadpoolBuilder {
     num_workers: Option<usize>,
     worker_name: Option<String>,
     thread_stack_size: Option<usize>,
 }
 
-impl SingleQueueBuilder {
+impl SingleQueueThreadpoolBuilder {
     /// Set the maximum number of worker-threads that will be alive at any given moment by the built
     /// [`SingleQueueThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
     ///
@@ -253,7 +253,7 @@ impl SingleQueueBuilder {
     ///     })
     /// }
     /// ```
-    pub fn num_workers(mut self, num_workers: usize) -> SingleQueueBuilder {
+    pub fn num_workers(mut self, num_workers: usize) -> SingleQueueThreadpoolBuilder {
         assert!(num_workers > 0);
         self.num_workers = Some(num_workers);
         self
@@ -281,7 +281,7 @@ impl SingleQueueBuilder {
     ///     })
     /// }
     /// ```
-    pub fn worker_name<S: AsRef<str>>(mut self, name: S) -> SingleQueueBuilder {
+    pub fn worker_name<S: AsRef<str>>(mut self, name: S) -> SingleQueueThreadpoolBuilder {
         // TODO save the copy with Into<String>
         self.worker_name = Some(name.as_ref().to_owned());
         self
@@ -309,14 +309,14 @@ impl SingleQueueBuilder {
     ///     })
     /// }
     /// ```
-    pub fn thread_stack_size(mut self, size: usize) -> SingleQueueBuilder {
+    pub fn thread_stack_size(mut self, size: usize) -> SingleQueueThreadpoolBuilder {
         self.thread_stack_size = Some(size);
         self
     }
 
-    /// Finalize the [`SingleQueueBuilder`] and build the [`SingleQueueThreadPool`].
+    /// Finalize the [`SingleQueueThreadpoolBuilder`] and build the [`SingleQueueThreadPool`].
     ///
-    /// [`SingleQueueBuilder`]: struct.SingleQueueBuilder.html
+    /// [`SingleQueueThreadpoolBuilder`]: struct.SingleQueueThreadpoolBuilder.html
     /// [`SingleQueueThreadPool`]: struct.SingleQueueThreadPool.html
     ///
     /// # Examples

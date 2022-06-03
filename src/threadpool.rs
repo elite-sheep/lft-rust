@@ -101,7 +101,7 @@ mod test;
 /// let pool = threadpool::auto_config();
 /// ```
 pub fn auto_config() -> ThreadPool {
-    builder().build()
+    lft_builder().build()
 }
 /// Initiate a new [`Builder`].
 ///
@@ -112,7 +112,7 @@ pub fn auto_config() -> ThreadPool {
 /// ```
 /// let builder = threadpool::builder();
 /// ```
-pub const fn builder() -> Builder {
+pub const fn lft_builder() -> Builder {
     Builder {
         num_workers: None,
         max_thread_count: None,
