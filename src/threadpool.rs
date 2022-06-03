@@ -1,6 +1,4 @@
-// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution and at
-// http://rust-lang.org/COPYRIGHT.
+// Copyright 2022 @yucwang
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -8,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! A thread pool used to execute functions in parallel.
+//! A lock-free thread pool used to execute functions in parallel.
 //!
 //! Spawns a specified number of worker threads and replenishes the pool if any worker threads
 //! panic.
@@ -24,7 +22,9 @@
 //!
 //! let n_workers = 4;
 //! let n_jobs = 8;
-//! let pool = threadpool::builder().num_workers(n_workers).build();
+//! let pool = lft_rust::lft_builder()
+//!                 .num_workers(n_workers)
+//!                 .build();
 //!
 //! let (tx, rx) = unbounded();
 //! for _ in 0..n_jobs {
@@ -46,14 +46,16 @@
 //! https://doc.rust-lang.org/reference/behavior-not-considered-unsafe.html).
 //!
 //! ```
-//! use threadpool::ThreadPool;
+//! use lft_rust::{ ThreadPool };
 //! use std::sync::{Arc, Barrier};
 //! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
 //! // create at least as many workers as jobs or you will deadlock yourself
 //! let n_workers = 42;
 //! let n_jobs = 23;
-//! let pool = threadpool::builder().num_workers(n_workers).build();
+//! let pool = lft_rust::lft_builder()
+//!                 .num_workers(n_workers)
+//!                 .build();
 //! let an_atomic = Arc::new(AtomicUsize::new(0));
 //!
 //! assert!(n_jobs <= n_workers, "too many jobs, will deadlock");
@@ -100,7 +102,7 @@ mod test;
 /// ```
 /// let pool = threadpool::auto_config();
 /// ```
-pub fn auto_config() -> ThreadPool {
+pub fn lft_auto_config() -> ThreadPool {
     lft_builder().build()
 }
 /// Initiate a new [`Builder`].
@@ -110,7 +112,7 @@ pub fn auto_config() -> ThreadPool {
 /// # Examples
 ///
 /// ```
-/// let builder = threadpool::builder();
+/// let builder = lft_rust::lft_builder();
 /// ```
 pub const fn lft_builder() -> Builder {
     Builder {
@@ -120,38 +122,6 @@ pub const fn lft_builder() -> Builder {
         thread_stack_size: None,
     }
 }
-
-/*
-/// Creates a new thread pool capable of executing `num_workers` number of jobs concurrently.
-/// Each thread will have the [name][thread name] `name`.
-///
-/// # Panics
-///
-/// This function will panic if `num_workers` is 0.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::thread;
-/// use threadpool::ThreadPool;
-///
-/// let pool = ThreadPool::with_name("worker".into(), 2);
-/// for _ in 0..2 {
-///     pool.execute(|| {
-///         assert_eq!(
-///             thread::current().name(),
-///             Some("worker")
-///         );
-///     });
-/// }
-/// pool.join();
-/// ```
-///
-/// [thread name]: https://doc.rust-lang.org/std/thread/struct.Thread.html#method.name
-pub fn with_name<S: AsRef<str>>(name: S) -> ThreadPool {
-    builder().worker_name(name).build()
-}
-*/
 
 trait FnBox {
     fn call_box(self: Box<Self>);
@@ -219,7 +189,8 @@ impl<'a> Drop for Sentinel<'a> {
 ///
 /// The three configuration options available:
 ///
-/// * `num_workers`: maximum number of threads that will be alive at any given moment by the built
+/// * `num_workers`: the number of worker threads that will be spawned upon building.
+/// * `max_thread_count`: maximum number of threads that will be alive at any given moment by the built
 ///   [`ThreadPool`]
 /// * `worker_name`: thread name for each of the threads spawned by the built [`ThreadPool`]
 /// * `thread_stack_size`: stack size (in bytes) for each of the threads spawned by the built
@@ -233,7 +204,7 @@ impl<'a> Drop for Sentinel<'a> {
 /// a 8 MB stack size:
 ///
 /// ```
-/// let pool = threadpool::builder()
+/// let pool = lft_rust::lft_builder()
 ///     .num_workers(8)
 ///     .thread_stack_size(8 * 1024 * 1024)
 ///     .build();
@@ -247,8 +218,8 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// Set the maximum number of worker-threads that will be alive at any given moment by the built
-    /// [`ThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
+    /// Set the number of threads that will be spawned upon building. If it is not specified, it
+    /// will be the maximum number of threads that can be spawned.
     ///
     /// [`ThreadPool`]: struct.ThreadPool.html
     ///
@@ -263,7 +234,7 @@ impl Builder {
     /// ```
     /// use std::thread;
     ///
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::lft_builder()
     ///     .num_workers(8)
     ///     .build();
     ///
@@ -279,6 +250,32 @@ impl Builder {
         self
     }
 
+    /// Set the maximum number of worker-threads that will be alive at any given moment by the built
+    /// [`ThreadPool`]. If not specified, defaults the number of threads to the number of CPUs.
+    ///
+    /// [`ThreadPool`]: struct.ThreadPool.html
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if `max_thread_count` is 0.
+    ///
+    /// # Examples
+    ///
+    /// No more than eight threads will be alive simultaneously for this pool:
+    ///
+    /// ```
+    /// use std::thread;
+    ///
+    /// let pool = threadpool::builder()
+    ///     .max_thread_count(8)
+    ///     .build();
+    ///
+    /// for _ in 0..42 {
+    ///     pool.execute(|| {
+    ///         println!("Hello from a worker thread!")
+    ///     })
+    /// }
+    /// ```
     pub fn max_thread_count(mut self, max_thread_count: usize) -> Builder {
         assert!(max_thread_count > 0);
         self.max_thread_count = Some(max_thread_count);
@@ -297,7 +294,7 @@ impl Builder {
     /// ```
     /// use std::thread;
     ///
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::lft_builder()
     ///     .worker_name("foo")
     ///     .build();
     ///
@@ -325,7 +322,7 @@ impl Builder {
     /// Each thread spawned by this pool will have a 4 MB stack:
     ///
     /// ```
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::lft_builder()
     ///     .thread_stack_size(4096 * 1024)
     ///     .build();
     ///
@@ -348,14 +345,12 @@ impl Builder {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::lft_builder()
     ///     .num_workers(8)
     ///     .thread_stack_size(16*1024*1024)
     ///     .build();
     /// ```
     pub fn build(self) -> ThreadPool {
-        // let (tx, rx) = unbounded::<Thunk<'static>>();
-
         let mut num_workers = self.num_workers.unwrap_or_else(num_cpus::get);
         let max_thread_count = self.max_thread_count.unwrap_or_else(|| {num_workers});
         if max_thread_count < num_workers {
@@ -424,7 +419,6 @@ impl Builder {
 
 struct ThreadPoolSharedData {
     name: Option<String>,
-    // job_receiver: Mutex<Receiver<Thunk<'static>>>,
     empty_trigger: Mutex<()>,
     empty_condvar: Condvar,
     join_generation: AtomicUsize,
@@ -479,7 +473,7 @@ impl ThreadPool {
     /// Execute four jobs on a thread pool that can run two jobs concurrently:
     ///
     /// ```
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::lft_auto_config();
     /// pool.execute(|| println!("hello"));
     /// pool.execute(|| println!("world"));
     /// pool.execute(|| println!("foo"));
@@ -539,7 +533,9 @@ impl ThreadPool {
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
-    /// let pool = threadpool::builder().num_workers(2).build();
+    /// let pool = lft_rust::lft_builder()
+    ///                     .num_workers(2)
+    ///                     .build();
     /// for _ in 0..10 {
     ///     pool.execute(|| {
     ///         sleep(Duration::from_secs(100));
@@ -561,7 +557,9 @@ impl ThreadPool {
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
-    /// let pool = threadpool::builder().num_workers(4).build();
+    /// let pool = lft_rust::lft_builder()
+    ///                     .num_workers(4)
+    ///                     .build();
     /// for _ in 0..10 {
     ///     pool.execute(move || {
     ///         sleep(Duration::from_secs(100));
@@ -580,7 +578,9 @@ impl ThreadPool {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::builder().num_workers(4).build();
+    /// let pool = lft_rust::lft_builder()
+    ///                     .num_workers(4)
+    ///                     .build();
     /// assert_eq!(4, pool.max_count());
     ///
     /// pool.set_num_workers(8);
@@ -600,7 +600,9 @@ impl ThreadPool {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::lft_builder()
+    ///                     .num_workers(4)
+    ///                     .build();
     /// for n in 0..10 {
     ///     pool.execute(move || {
     ///         // simulate a panic
@@ -670,6 +672,22 @@ impl ThreadPool {
     //     }
     // }
 
+    /// Spawn an extra worker thread. Can be used to increase the number of
+    /// work threads during runtimes. If the number of threads is already 
+    /// the maximum, it will print out an warning.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::time::Duration;
+    /// use std::thread::sleep;
+    ///
+    /// let  pool = threadpool::builder().num_workers(4).build();
+    /// for _ in 0..10 {
+    ///     pool.execute(move || {
+    ///         sleep(Duration::from_secs(100));
+    ///     });
+    /// pool.spawn_extra_one_worker();
+    /// ```
     pub fn spawn_extra_one_worker(&self) {
         if self.shared_data.num_workers.load(Ordering::Acquire) 
             >= self.shared_data.max_thread_count.load(Ordering::Relaxed) {
@@ -701,12 +719,26 @@ impl ThreadPool {
                     warn!("Max thread number exceeded.");
                     break;
             } 
-            // let ten_millis = time::Duration::from_millis(10);
-            // thread::sleep(ten_millis);
         }
 
     }
 
+    /// Shutdown a worker thread in the threadpool. 
+    /// Can be used to increase the number of work threads during runtimes. 
+    /// If the number of threads is already 0, it will print out an warning.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::time::Duration;
+    /// use std::thread::sleep;
+    ///
+    /// let  pool = threadpool::builder().num_workers(4).build();
+    /// for _ in 0..10 {
+    ///     pool.execute(move || {
+    ///         sleep(Duration::from_secs(100));
+    ///     });
+    /// pool.spawn_extra_one_worker();
+    /// ```
     pub fn shutdown_one_worker(&self) {
         if self.shared_data.num_workers.load(Ordering::SeqCst) <= 0 {
             warn!("No thread to shutdown");
@@ -745,8 +777,6 @@ impl ThreadPool {
                 warn!("No thread to shutdown");
                 break;
             }
-            //let ten_millis = time::Duration::from_millis(10);
-            //thread::sleep(ten_millis);
         }
     }
 
@@ -771,7 +801,7 @@ impl ThreadPool {
     /// use std::sync::Arc;
     /// use std::sync::atomic::{AtomicUsize, Ordering};
     ///
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::lft_auto_config();
     /// let test_count = Arc::new(AtomicUsize::new(0));
     ///
     /// for _ in 0..42 {
@@ -819,7 +849,10 @@ impl Clone for ThreadPool {
     /// use std::thread;
     /// use crossbeam_channel::unbounded;
     ///
-    /// let pool = threadpool::builder().worker_name("clone example").num_workers(2).build();
+    /// let pool = lft_rust::lft_builder()
+    ///                 .worker_name("clone example")
+    ///                 .num_workers(2)
+    ///                 .build();
     ///
     /// let results = (0..2)
     ///     .map(|i| {
@@ -870,8 +903,8 @@ impl PartialEq for ThreadPool {
     /// Check if you are working with the same pool
     ///
     /// ```
-    /// let a = threadpool::auto_config();
-    /// let b = threadpool::auto_config();
+    /// let a = lft_rust::lft_auto_config();
+    /// let b = lft_rust::lft_auto_config();
     ///
     /// assert_eq!(a, a);
     /// assert_eq!(b, b);
