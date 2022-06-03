@@ -101,7 +101,7 @@ mod test;
 /// let pool = threadpool::auto_config();
 /// ```
 pub fn auto_config() -> ThreadPool {
-    builder().build()
+    lft_builder().build()
 }
 /// Initiate a new [`Builder`].
 ///
@@ -112,7 +112,7 @@ pub fn auto_config() -> ThreadPool {
 /// ```
 /// let builder = threadpool::builder();
 /// ```
-pub const fn builder() -> Builder {
+pub const fn lft_builder() -> Builder {
     Builder {
         num_workers: None,
         max_thread_count: None,
@@ -714,7 +714,7 @@ impl ThreadPool {
         }
         self.shared_data.num_workers.fetch_sub(1, Ordering::SeqCst);
 
-        while true {
+        loop {
             let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
             let mut target_thread_id = max_thread_count + 1;
             let mut min_num_of_jobs = 0;
