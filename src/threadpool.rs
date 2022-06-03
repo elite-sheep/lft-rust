@@ -105,6 +105,7 @@ mod test;
 pub fn lft_auto_config() -> ThreadPool {
     lft_builder().build()
 }
+
 /// Initiate a new [`Builder`].
 ///
 /// [`Builder`]: struct.Builder.html
@@ -486,8 +487,7 @@ impl ThreadPool {
     {
         let max_thread_count = self.shared_data.max_thread_count.load(Ordering::Relaxed);
 
-        let mut task_scheduled = false;
-        while !task_scheduled {
+        loop {
             let mut target_thread_id = max_thread_count + 1;
             let mut min_jobs_counted: usize = 0;
             for i in 0..max_thread_count {
@@ -497,7 +497,6 @@ impl ThreadPool {
                 }
                 if self.context.queued_count[i].load(Ordering::SeqCst) == 0 {
                     target_thread_id = i;
-                    min_jobs_counted = 0;
                     break;
                 }
                 if target_thread_id > max_thread_count 
@@ -516,7 +515,6 @@ impl ThreadPool {
                 self.context.senders[target_thread_id]
                     .send(Box::new(job))
                     .expect("ThreadPool::execute unable to send job into queue.");
-                task_scheduled = true;
                 break;
             }
             let ten_millis = time::Duration::from_millis(10);
