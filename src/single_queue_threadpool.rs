@@ -1,6 +1,7 @@
-// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution and at
-// http://rust-lang.org/COPYRIGHT.
+// Copyright 2014 The Rust Project Developers. 
+// Copyright 2022 @yucwang.
+// See the COPYRIGHT file at the top-level directory of this 
+// distribution and at http://rust-lang.org/COPYRIGHT.
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -97,11 +98,12 @@ mod test;
 /// Create a new thread pool capable of executing at least one jobs concurrently:
 ///
 /// ```
-/// let pool = threadpool::auto_config();
+/// let pool = lft_rust::single_queue_threadpool_auto_config();
 /// ```
-pub fn auto_config() -> SingleQueueThreadpool {
+pub fn single_queue_threadpool_auto_config() -> SingleQueueThreadpool {
     single_queue_threadpool_builder().build()
 }
+
 /// Initiate a new [`SingleQueueThreadpoolBuilder`].
 ///
 /// [`SingleQueueThreadpoolBuilder`]: struct.SingleQueueThreadpoolBuilder.html
@@ -109,7 +111,7 @@ pub fn auto_config() -> SingleQueueThreadpool {
 /// # Examples
 ///
 /// ```
-/// let builder = threadpool::builder();
+/// let builder = lft_rust::single_queue_threadpool_builder();
 /// ```
 pub const fn single_queue_threadpool_builder() -> SingleQueueThreadpoolBuilder {
     SingleQueueThreadpoolBuilder {
@@ -118,38 +120,6 @@ pub const fn single_queue_threadpool_builder() -> SingleQueueThreadpoolBuilder {
         thread_stack_size: None,
     }
 }
-
-/*
-/// Creates a new thread pool capable of executing `num_workers` number of jobs concurrently.
-/// Each thread will have the [name][thread name] `name`.
-///
-/// # Panics
-///
-/// This function will panic if `num_workers` is 0.
-///
-/// # Examples
-///
-/// ```rust
-/// use std::thread;
-/// use threadpool::SingleQueueThreadpool;
-///
-/// let pool = SingleQueueThreadpool::with_name("worker".into(), 2);
-/// for _ in 0..2 {
-///     pool.execute(|| {
-///         assert_eq!(
-///             thread::current().name(),
-///             Some("worker")
-///         );
-///     });
-/// }
-/// pool.join();
-/// ```
-///
-/// [thread name]: https://doc.rust-lang.org/std/thread/struct.Thread.html#method.name
-pub fn with_name<S: AsRef<str>>(name: S) -> SingleQueueThreadpool {
-    builder().worker_name(name).build()
-}
-*/
 
 trait FnBox {
     fn call_box(self: Box<Self>);
@@ -214,7 +184,7 @@ impl<'a> Drop for Sentinel<'a> {
 /// a 8 MB stack size:
 ///
 /// ```
-/// let pool = threadpool::builder()
+/// let pool = lft_rust::single_queue_threadpool_builder()
 ///     .num_workers(8)
 ///     .thread_stack_size(8 * 1024 * 1024)
 ///     .build();
@@ -243,7 +213,7 @@ impl SingleQueueThreadpoolBuilder {
     /// ```
     /// use std::thread;
     ///
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::single_queue_threadpool_builder()
     ///     .num_workers(8)
     ///     .build();
     ///
@@ -271,7 +241,7 @@ impl SingleQueueThreadpoolBuilder {
     /// ```
     /// use std::thread;
     ///
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::single_queue_threadpool_builder()
     ///     .worker_name("foo")
     ///     .build();
     ///
@@ -299,7 +269,7 @@ impl SingleQueueThreadpoolBuilder {
     /// Each thread spawned by this pool will have a 4 MB stack:
     ///
     /// ```
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::single_queue_threadpool_builder()
     ///     .thread_stack_size(4096 * 1024)
     ///     .build();
     ///
@@ -322,7 +292,7 @@ impl SingleQueueThreadpoolBuilder {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::builder()
+    /// let pool = lft_rust::single_queue_threadpool_builder()
     ///     .num_workers(8)
     ///     .thread_stack_size(16*1024*1024)
     ///     .build();
@@ -405,7 +375,7 @@ impl SingleQueueThreadpool {
     /// Execute four jobs on a thread pool that can run two jobs concurrently:
     ///
     /// ```
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::single_queue_threadpool_auto_config();
     /// pool.execute(|| println!("hello"));
     /// pool.execute(|| println!("world"));
     /// pool.execute(|| println!("foo"));
@@ -427,11 +397,13 @@ impl SingleQueueThreadpool {
     /// # Examples
     ///
     /// ```
-    /// use threadpool::SingleQueueThreadpool;
+    /// use lft_rust::SingleQueueThreadpool;
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
-    /// let pool = threadpool::builder().num_workers(2).build();
+    /// let pool = lft_rust::single_queue_threadpool_builder()
+    ///                         .num_workers(2)
+    ///                         .build();
     /// for _ in 0..10 {
     ///     pool.execute(|| {
     ///         sleep(Duration::from_secs(100));
@@ -453,7 +425,10 @@ impl SingleQueueThreadpool {
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
-    /// let pool = threadpool::builder().num_workers(4).build();
+    /// let pool = lft_rust::single_queue_threadpool_builder()
+    ///                         .num_workers(4)
+    ///                         .build();
+    ///
     /// for _ in 0..10 {
     ///     pool.execute(move || {
     ///         sleep(Duration::from_secs(100));
@@ -472,7 +447,9 @@ impl SingleQueueThreadpool {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::builder().num_workers(4).build();
+    /// let pool = lft_rust::single_queue_threadpool_builder()
+    ///                         .num_workers(4)
+    ///                         .build();
     /// assert_eq!(4, pool.max_count());
     ///
     /// pool.set_num_workers(8);
@@ -487,7 +464,7 @@ impl SingleQueueThreadpool {
     /// # Examples
     ///
     /// ```
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::single_queue_threadpool_auto_config();
     /// for n in 0..10 {
     ///     pool.execute(move || {
     ///         // simulate a panic
@@ -518,7 +495,10 @@ impl SingleQueueThreadpool {
     /// use std::time::Duration;
     /// use std::thread::sleep;
     ///
-    /// let  pool = threadpool::builder().num_workers(4).build();
+    /// let pool = lft_rust::single_queue_threadpool_builder()
+    ///                             .num_workers(4)
+    ///                             .build();
+    ///
     /// for _ in 0..10 {
     ///     pool.execute(move || {
     ///         sleep(Duration::from_secs(100));
@@ -574,11 +554,11 @@ impl SingleQueueThreadpool {
     /// # Examples
     ///
     /// ```
-    /// use threadpool::SingleQueueThreadpool;
+    /// use lft_rust::SingleQueueThreadpool;
     /// use std::sync::Arc;
     /// use std::sync::atomic::{AtomicUsize, Ordering};
     ///
-    /// let pool = threadpool::auto_config();
+    /// let pool = lft_rust::single_queue_threadpool_auto_config();
     /// let test_count = Arc::new(AtomicUsize::new(0));
     ///
     /// for _ in 0..42 {
@@ -626,7 +606,10 @@ impl Clone for SingleQueueThreadpool {
     /// use std::thread;
     /// use crossbeam_channel::unbounded;
     ///
-    /// let pool = threadpool::builder().worker_name("clone example").num_workers(2).build();
+    /// let pool = lft_rust::single_queue_threadpool_builder()
+    ///                 .worker_name("clone example")
+    ///                 .num_workers(2)
+    ///                 .build();
     ///
     /// let results = (0..2)
     ///     .map(|i| {
@@ -675,8 +658,8 @@ impl PartialEq for SingleQueueThreadpool {
     /// Check if you are working with the same pool
     ///
     /// ```
-    /// let a = threadpool::auto_config();
-    /// let b = threadpool::auto_config();
+    /// let a = lft_rust::single_queue_threadpool_auto_config();
+    /// let b = lft_rust::single_queue_threadpool_auto_config();
     ///
     /// assert_eq!(a, a);
     /// assert_eq!(b, b);
