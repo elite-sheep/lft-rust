@@ -5,6 +5,7 @@ homepage = "https://github.com/elite-sheep/lft-rust"
 repository = "https://github.com/elite-sheep/lft-rust"
 readme = "README.md"
 license = "MIT"
+description = "A lock-free threadpool implementation. We provide a traditional single queue threadpool and a lock-free threadpool"
 keywords = [ "threadpool", "concurrency" ]
 categories = [ "multithreading", "high-performance computing", "threading" ]
 rust-version = "1.57.0"
