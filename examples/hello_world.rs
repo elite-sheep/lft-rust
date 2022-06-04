@@ -11,20 +11,17 @@ use lft_rust::{
 
 use crossbeam_channel::unbounded;
 
-use std::{ thread };
-
 fn single_queue_threadpool_hello_world() {
     trace!("Hello world: Single queue threadpool.");
     let n_workers = 4;
     let n_tasks = 16;
-    let max_threads = 4;
     let thread_pool = single_queue_threadpool_builder()
         .num_workers(n_workers)
         .thread_stack_size(8 * 1024 * 1024)
         .build();
 
     let (tx, rx) = unbounded();
-    for i in 0..n_tasks {
+    for _ in 0..n_tasks {
         let tx = tx.clone();
         thread_pool.execute(move || {
             tx.send(1).expect("channel will be there waiting for the pool");
@@ -50,7 +47,7 @@ fn lft_hello_world() {
         .build();
 
     let (tx, rx) = unbounded();
-    for i in 0..n_tasks {
+    for _ in 0..n_tasks {
         let tx = tx.clone();
         thread_pool.execute(move || {
             tx.send(1).expect("channel will be there waiting for the pool");
